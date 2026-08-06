@@ -12,13 +12,13 @@ Create a dedicated `*-go.mod` file in `misc/`:
 
 ```bash
 cd misc
-go mod init -modfile=<tool>-go.mod github.com/WinPooh32/singularity/misc
+go mod init -modfile=<tool>-go.mod github.com/WinPooh32/insight/misc
 go get -tool -modfile=<tool>-go.mod <module>@latest
 ```
 
 Example for `gofumpt`:
 ```bash
-go mod init -modfile=gofumpt-go.mod github.com/WinPooh32/singularity/misc
+go mod init -modfile=gofumpt-go.mod github.com/WinPooh32/insight/misc
 go get -tool -modfile=gofumpt-go.mod mvdan.cc/gofumpt@latest
 ```
 
