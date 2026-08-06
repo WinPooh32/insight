@@ -1,0 +1,9 @@
+version: 3
+workdir: .
+components:
+  main: { in: . }
+
+deps:
+  main:
+    mayDependOn:
+      - main

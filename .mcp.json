@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "searxng": {
+      "command": "make",
+      "args": [
+        "run/mcp-searxng"
+      ]
+    },
+    "browser": {
+      "command": "make",
+      "args": [
+        "run/mcp-lightpanda"
+      ]
+    }
+  }
+}

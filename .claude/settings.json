@@ -1,0 +1,166 @@
+{
+    "env": {
+        "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1"
+    },
+    "permissions": {
+        "deny": [
+            "Read(./.env)",
+            "Read(./.env.*)",
+            "Read(*.pem)",
+            "Read(*.key)",
+            "Read(~/.ssh/**)",
+            "Read(*gen.go)",
+            "Edit(*gen.go)",
+            "Edit(.golangci.yml)"
+        ]
+    },
+    "enabledPlugins": {
+        "gopls-lsp@claude-plugins-official": true
+    },
+    "hooks": {
+        "PreToolUse": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/circuit-breaker.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/block-download-pipes.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "Write|Edit|Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/block-nolint.sh",
+                        "statusMessage": "Checking for //nolint..."
+                    }
+                ]
+            }
+        ],
+        "SessionEnd": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/circuit-breaker.sh"
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "Edit|Write",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "make fmt",
+                        "if": "Edit(*.go)",
+                        "timeout": 60,
+                        "statusMessage": "Running make fmt..."
+                    },
+                    {
+                        "type": "command",
+                        "command": "make fmt",
+                        "if": "Edit(*.md)",
+                        "timeout": 60,
+                        "statusMessage": "Running make fmt..."
+                    },
+                    {
+                        "type": "command",
+                        "command": "make fmt",
+                        "if": "Write(*.go)",
+                        "timeout": 60,
+                        "statusMessage": "Running make fmt..."
+                    },
+                    {
+                        "type": "command",
+                        "command": "make fmt",
+                        "if": "Write(*.md)",
+                        "timeout": 60,
+                        "statusMessage": "Running make fmt..."
+                    },
+                    {
+                        "type": "command",
+                        "command": "make lint/typos",
+                        "timeout": 30,
+                        "statusMessage": "Checking typos..."
+                    }
+                ]
+            },
+            {
+                "matcher": "Skill",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "echo \"<system-reminder>Load the next skill!</system-reminder>\""
+                    }
+                ]
+            },
+            {
+                "matcher": "mcp__searxng__query",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/warn-mcp-query.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "mcp__browser__.*",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/warn-mcp-query.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "Bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/warn-web-request.sh"
+                    }
+                ]
+            }
+        ],
+        "SessionStart": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "echo \"<system-reminder>1. Always run only one sub-agent at a time.\n2. Read fewer than 3 files at a time.</system-reminder>\""
+                    },
+                    {
+                        "type": "command",
+                        "command": "echo \"<system-reminder>Your project knowledge is saved in .claude/skills/research/index.md</system-reminder>\""
+                    }
+                ]
+            }
+        ],
+        "UserPromptSubmit": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": "echo \"<system-reminder>Your project knowledge is saved in .claude/skills/research/index.md</system-reminder>\""
+                    }
+                ]
+            }
+        ]
+    }
+}

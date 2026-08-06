@@ -1,0 +1,10 @@
+{
+    "recommendations": [
+        "golang.go",
+        "tekumara.typos-vscode",
+        "usernamehw.errorlens",
+        "eamodio.gitlens",
+        "DavidAnson.vscode-markdownlint",
+        "vscode-icons-team.vscode-icons"
+    ]
+}
