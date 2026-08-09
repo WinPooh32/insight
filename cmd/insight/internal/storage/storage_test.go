@@ -554,3 +554,97 @@ func TestConstructorLogsInit(t *testing.T) {
 		t.Errorf("expected 'sqlite storage initialized' in log output, got: %s", logBuf.String())
 	}
 }
+
+func TestRecentNegativeLimit(t *testing.T) {
+	t.Parallel()
+
+	storageInst := setupTestStorage(t)
+
+	ctx := context.Background()
+
+	// Store an event
+	evt := events.NewEnvelope(eventSessionStart, map[string]any{})
+	if err := storageInst.Store(ctx, evt); err != nil {
+		t.Fatalf("failed to store event: %v", err)
+	}
+
+	// Negative limit should return an error
+	_, err := storageInst.Recent(ctx, -1)
+	if err == nil {
+		t.Error("expected error for negative limit")
+	}
+}
+
+func TestByTypeNegativeLimit(t *testing.T) {
+	t.Parallel()
+
+	storageInst := setupTestStorage(t)
+
+	ctx := context.Background()
+
+	// Negative limit should return an error
+	_, err := storageInst.ByType(ctx, "TestType", -1, 0)
+	if err == nil {
+		t.Error("expected error for negative limit in ByType")
+	}
+
+	// Negative offset should return an error
+	_, err = storageInst.ByType(ctx, "TestType", 10, -1)
+	if err == nil {
+		t.Error("expected error for negative offset in ByType")
+	}
+}
+
+func TestByTypeOffsetPagination(t *testing.T) {
+	t.Parallel()
+
+	storageInst := setupTestStorage(t)
+
+	ctx := context.Background()
+
+	// Store 4 events with distinct identifiers
+	for i := range 4 {
+		evt := events.NewEnvelope(eventUserPrompt, map[string]any{
+			testSessionID: "pagination-test",
+			"index":       strconv.Itoa(i),
+		})
+		if err := storageInst.Store(ctx, evt); err != nil {
+			t.Fatalf("failed to store event %d: %v", i, err)
+		}
+	}
+
+	// Get first page with offset=0, limit=2
+	page1, err := storageInst.ByType(ctx, eventUserPrompt, 2, 0)
+	if err != nil {
+		t.Fatalf("failed to get first page: %v", err)
+	}
+
+	if len(page1) != 2 {
+		t.Errorf("expected 2 events on first page, got %d", len(page1))
+	}
+
+	// Get second page with offset=2, limit=2
+	page2, err := storageInst.ByType(ctx, eventUserPrompt, 2, 2)
+	if err != nil {
+		t.Fatalf("failed to get second page: %v", err)
+	}
+
+	if len(page2) != 2 {
+		t.Errorf("expected 2 events on second page, got %d", len(page2))
+	}
+
+	// Pages should have different events
+	if page1[0].ID == page2[0].ID {
+		t.Error("expected different events on different pages")
+	}
+
+	// Third page should be empty
+	page3, err := storageInst.ByType(ctx, eventUserPrompt, 2, 4)
+	if err != nil {
+		t.Fatalf("failed to get third page: %v", err)
+	}
+
+	if len(page3) != 0 {
+		t.Errorf("expected 0 events on third page, got %d", len(page3))
+	}
+}

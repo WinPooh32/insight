@@ -1,5 +1,3 @@
-skip_without_test: true
-skip_with_build_tags: true
 exclude_dirs:
   - db
   - migrations

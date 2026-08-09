@@ -117,6 +117,10 @@ func (s *SQLiteStorage) Store(ctx context.Context, evt events.Envelope) error {
 
 // Recent returns the most recent events.
 func (s *SQLiteStorage) Recent(ctx context.Context, limit int) ([]db.Event, error) {
+	if limit < 0 {
+		return nil, fmt.Errorf("limit must be non-negative, got %d", limit)
+	}
+
 	evts, err := s.q.RecentEvents(ctx, db.RecentEventsParams{
 		Limit:  int64(limit),
 		Offset: 0,
@@ -143,6 +147,10 @@ func (s *SQLiteStorage) BySession(ctx context.Context, sessionID string) ([]db.E
 
 // ByType returns events filtered by type with pagination.
 func (s *SQLiteStorage) ByType(ctx context.Context, eventType string, limit int, offset int) ([]db.Event, error) {
+	if limit < 0 || offset < 0 {
+		return nil, fmt.Errorf("limit and offset must be non-negative, got limit=%d offset=%d", limit, offset)
+	}
+
 	evts, err := s.q.EventsByType(ctx, db.EventsByTypeParams{
 		EventType: eventType,
 		Limit:     int64(limit),
