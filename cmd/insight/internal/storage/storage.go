@@ -56,7 +56,11 @@ func NewSQLiteStorage(ctx context.Context, dbPath string, logger *slog.Logger) (
 
 	// Run goose migrations from embedded SQL files.
 	goose.SetBaseFS(migrations.Embed)
-	goose.SetDialect("sqlite")
+
+	if err := goose.SetDialect("sqlite"); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("set dialect: %w", err)
+	}
 
 	if err := goose.Up(sdb, ".", goose.WithAllowMissing()); err != nil {
 		sdb.Close()

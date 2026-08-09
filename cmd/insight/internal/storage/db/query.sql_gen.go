@@ -65,9 +65,9 @@ OFFSET ?
 `
 
 type EventsByTypeParams struct {
-	EventType string
-	Limit     int64
-	Offset    int64
+	EventType string `json:"event_type"`
+	Limit     int64  `json:"limit"`
+	Offset    int64  `json:"offset"`
 }
 
 func (q *Queries) EventsByType(ctx context.Context, arg EventsByTypeParams) ([]Event, error) {
@@ -123,11 +123,11 @@ VALUES (?, ?, ?, ?, ?)
 `
 
 type InsertEventParams struct {
-	ID        string
-	EventType string
-	Received  string
-	Payload   string
-	SessionID sql.NullString
+	ID        string         `json:"id"`
+	EventType string         `json:"event_type"`
+	Received  string         `json:"received"`
+	Payload   string         `json:"payload"`
+	SessionID sql.NullString `json:"session_id"`
 }
 
 func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error {
@@ -149,8 +149,8 @@ OFFSET ?
 `
 
 type RecentEventsParams struct {
-	Limit  int64
-	Offset int64
+	Limit  int64 `json:"limit"`
+	Offset int64 `json:"offset"`
 }
 
 func (q *Queries) RecentEvents(ctx context.Context, arg RecentEventsParams) ([]Event, error) {
