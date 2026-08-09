@@ -1,9 +1,47 @@
 version: 3
 workdir: .
+allow:
+  depOnAnyVendor: true
+
 components:
-  main: { in: . }
+  main: { in: cmd/insight }
+  config: { in: cmd/insight/internal/config }
+  storage: { in: cmd/insight/internal/storage }
+  http: { in: cmd/insight/internal/http }
+  events: { in: cmd/insight/internal/events }
+  db: { in: cmd/insight/internal/storage/db }
+  migrations: { in: cmd/insight/internal/storage/migrations }
 
 deps:
   main:
     mayDependOn:
       - main
+      - config
+      - storage
+      - http
+      - events
+      - db
+      - migrations
+  config:
+    mayDependOn:
+      - config
+  storage:
+    mayDependOn:
+      - storage
+      - events
+      - db
+  http:
+    mayDependOn:
+      - http
+      - storage
+      - events
+      - db
+  events:
+    mayDependOn:
+      - events
+  db:
+    mayDependOn:
+      - db
+  migrations:
+    mayDependOn:
+      - migrations

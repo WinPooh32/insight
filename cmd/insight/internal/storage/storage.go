@@ -1,0 +1,179 @@
+package storage
+
+import (
+	"context"
+	"database/sql"
+	"fmt"
+	"log/slog"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/WinPooh32/insight/cmd/insight/internal/events"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
+
+	// Register the SQLite driver for use by database/sql.
+	_ "modernc.org/sqlite"
+)
+
+const storageDirPerm = 0o755
+
+const createEventsSQL = `
+CREATE TABLE IF NOT EXISTS events (
+    id         TEXT    PRIMARY KEY,
+    event_type TEXT    NOT NULL,
+    received   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
+    payload    TEXT    NOT NULL,
+    session_id TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
+CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
+CREATE INDEX IF NOT EXISTS idx_events_received ON events(received);
+`
+
+// Storage provides an interface for storing and querying hook events.
+type Storage interface {
+	Store(ctx context.Context, evt events.Envelope) error
+	Recent(ctx context.Context, limit int) ([]db.Event, error)
+	BySession(ctx context.Context, sessionID string) ([]db.Event, error)
+	ByType(ctx context.Context, eventType string, limit int, offset int) ([]db.Event, error)
+	Count(ctx context.Context) (int64, error)
+	Close() error
+}
+
+// SQLiteStorage wraps sqlc-generated queries with SQLite.
+type SQLiteStorage struct {
+	q   *db.Queries
+	db  *sql.DB
+	log *slog.Logger
+}
+
+// NewSQLiteStorage creates a new SQLite storage at the given path.
+func NewSQLiteStorage(ctx context.Context, dbPath string, logger *slog.Logger) (*SQLiteStorage, error) {
+	if err := os.MkdirAll(filepath.Dir(dbPath), storageDirPerm); err != nil {
+		return nil, fmt.Errorf("create db directory: %w", err)
+	}
+
+	sdb, err := sql.Open("sqlite", dbPath)
+	if err != nil {
+		return nil, fmt.Errorf("open sqlite: %w", err)
+	}
+
+	// Enable WAL mode for better concurrent read performance.
+	if _, err := sdb.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("set journal mode: %w", err)
+	}
+
+	// Create schema if not exists (safety net for tests without goose migrations).
+	if _, err := sdb.ExecContext(ctx, createEventsSQL); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("create schema: %w", err)
+	}
+
+	q := db.New(sdb)
+
+	logger.Info("sqlite storage initialized", "path", dbPath)
+
+	return &SQLiteStorage{
+		q:   q,
+		db:  sdb,
+		log: logger,
+	}, nil
+}
+
+// Store persists a hook event to SQLite.
+func (s *SQLiteStorage) Store(ctx context.Context, evt events.Envelope) error {
+	payload, err := evt.ToJSON()
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to marshal payload", "error", err)
+		return fmt.Errorf("marshal payload: %w", err)
+	}
+
+	sessionID := sql.NullString{
+		Valid:  evt.SessionID != "",
+		String: evt.SessionID,
+	}
+
+	err = s.q.InsertEvent(ctx, db.InsertEventParams{
+		ID:        evt.ID,
+		EventType: evt.EventType,
+		Received:  evt.Received.Format(time.RFC3339Nano),
+		Payload:   string(payload),
+		SessionID: sessionID,
+	})
+	if err != nil {
+		s.log.ErrorContext(ctx, "failed to store event",
+			"error", err,
+			"event_id", evt.ID,
+		)
+
+		return fmt.Errorf("insert event: %w", err)
+	}
+
+	s.log.InfoContext(ctx, "event stored",
+		"event_type", evt.EventType,
+		"session_id", evt.SessionID,
+	)
+
+	return nil
+}
+
+// Recent returns the most recent events.
+func (s *SQLiteStorage) Recent(ctx context.Context, limit int) ([]db.Event, error) {
+	evts, err := s.q.RecentEvents(ctx, db.RecentEventsParams{
+		Limit:  int64(limit),
+		Offset: 0,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("recent events: %w", err)
+	}
+
+	return evts, nil
+}
+
+// BySession returns all events for a given session.
+func (s *SQLiteStorage) BySession(ctx context.Context, sessionID string) ([]db.Event, error) {
+	evts, err := s.q.EventsBySession(ctx, sql.NullString{
+		Valid:  true,
+		String: sessionID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("events by session: %w", err)
+	}
+
+	return evts, nil
+}
+
+// ByType returns events filtered by type with pagination.
+func (s *SQLiteStorage) ByType(ctx context.Context, eventType string, limit int, offset int) ([]db.Event, error) {
+	evts, err := s.q.EventsByType(ctx, db.EventsByTypeParams{
+		EventType: eventType,
+		Limit:     int64(limit),
+		Offset:    int64(offset),
+	})
+	if err != nil {
+		return nil, fmt.Errorf("events by type: %w", err)
+	}
+
+	return evts, nil
+}
+
+// Count returns the total number of stored events.
+func (s *SQLiteStorage) Count(ctx context.Context) (int64, error) {
+	count, err := s.q.EventCount(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("event count: %w", err)
+	}
+
+	return count, nil
+}
+
+// Close closes the SQLite database connection.
+func (s *SQLiteStorage) Close() error {
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close db: %w", err)
+	}
+
+	return nil
+}

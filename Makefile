@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: help lint lint/go lint/typos lint/md lint/arch fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting
+.PHONY: help lint lint/go lint/typos lint/md lint/arch fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting gen/insight-storage run/insight build/insight
 
 ## Show available targets
 help:
@@ -78,3 +78,17 @@ test/all:
 test/mutesting:
 	@echo "Run mutation testing"
 	@go tool -modfile=misc/go-mutesting-go.mod go-mutesting --exec=misc/scripts/mutate-test.sh --test-recursive ./...
+
+## Service targets
+gen/insight-storage:
+	@echo "Generate sqlc code"
+	@go tool -modfile=misc/sqlc-go.mod sqlc generate -f cmd/insight/internal/storage/sqlc.yaml
+
+run/insight:
+	@echo "Run insight service"
+	@go run ./cmd/insight
+
+## Build relay service
+build/insight:
+	@echo "Build insight service"
+	@go build -o build/insight ./cmd/insight

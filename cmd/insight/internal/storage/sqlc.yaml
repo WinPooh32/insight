@@ -1,0 +1,16 @@
+version: "2"
+sql:
+  - engine: "sqlite"
+    queries: "queries"
+    schema: "migrations"
+    gen:
+      go:
+        package: "db"
+        out: "db"
+        emit_interface: false
+        emit_empty_slices: true
+        emit_json_tags: false
+        output_db_file_name: "db_gen.go"
+        output_models_file_name: "models_gen.go"
+        output_querier_file_name: "querier_gen.go"
+        output_files_suffix: "_gen"
