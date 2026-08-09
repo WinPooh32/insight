@@ -174,7 +174,7 @@ func TestHandleEventMultipleTypes(t *testing.T) {
 	router := setupTestRouter(t)
 
 	server := httptest.NewServer(router)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	// Test different event type endpoints
 	endpoints := []string{

@@ -108,7 +108,7 @@ func TestListEventsLimitBoundary(t *testing.T) {
 	router := setupTestQueryRouter(t)
 
 	server := httptest.NewServer(router)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	// Post several events
 	for i := range 5 {
@@ -446,7 +446,7 @@ func TestListEventsLimitMaxBoundary(t *testing.T) {
 	router := setupTestQueryRouter(t)
 
 	server := httptest.NewServer(router)
-	defer server.Close()
+	t.Cleanup(server.Close)
 
 	// Post 60 events to test max limit boundary
 	for range 60 {
