@@ -11,25 +11,14 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/migrations"
+	"github.com/pressly/goose/v3"
 
 	// Register the SQLite driver for use by database/sql.
 	_ "modernc.org/sqlite"
 )
 
 const storageDirPerm = 0o755
-
-const createEventsSQL = `
-CREATE TABLE IF NOT EXISTS events (
-    id         TEXT    PRIMARY KEY,
-    event_type TEXT    NOT NULL,
-    received   TEXT    NOT NULL DEFAULT (strftime('%Y-%m-%dT%H:%M:%fZ', 'now')),
-    payload    TEXT    NOT NULL,
-    session_id TEXT
-);
-CREATE INDEX IF NOT EXISTS idx_events_session_id ON events(session_id);
-CREATE INDEX IF NOT EXISTS idx_events_event_type ON events(event_type);
-CREATE INDEX IF NOT EXISTS idx_events_received ON events(received);
-`
 
 // Storage provides an interface for storing and querying hook events.
 type Storage interface {
@@ -65,10 +54,13 @@ func NewSQLiteStorage(ctx context.Context, dbPath string, logger *slog.Logger) (
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
 
-	// Create schema if not exists (safety net for tests without goose migrations).
-	if _, err := sdb.ExecContext(ctx, createEventsSQL); err != nil {
+	// Run goose migrations from embedded SQL files.
+	goose.SetBaseFS(migrations.Embed)
+	goose.SetDialect("sqlite")
+
+	if err := goose.Up(sdb, ".", goose.WithAllowMissing()); err != nil {
 		sdb.Close()
-		return nil, fmt.Errorf("create schema: %w", err)
+		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 
 	q := db.New(sdb)
