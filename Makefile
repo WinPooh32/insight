@@ -1,13 +1,13 @@
 -include .env
 
-.PHONY: help lint lint/go lint/typos lint/md lint/arch fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting gen/insight-storage run/insight build/insight
+.PHONY: help lint lint/go lint/typos lint/md lint/arch lint/bd fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
 
 ## Show available targets
 help:
 	@grep -E '^[a-zA-Z_/-]+:.*## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 ## Run all linters
-lint: lint/go lint/typos lint/md lint/arch
+lint: lint/go lint/typos lint/md lint/arch lint/bd
 
 lint/go:
 	@echo "Run go linter"
@@ -24,6 +24,10 @@ lint/md:
 lint/arch:
 	@echo "Run architecture linter"
 	@go tool -modfile=misc/go-arch-lint-go.mod go-arch-lint check
+
+lint/bd:
+	@echo "Run beads linter"
+	@misc/bin/bd lint
 
 ## Format all source files
 fmt: fmt/go fmt/golangci-lint fmt/md
@@ -53,6 +57,34 @@ run/mcp-lightpanda:
 	@echo "Run lightpanda MCP server"
 	@misc/bin/lightpanda mcp $(LIGHTPANDA_ARGS)
 
+## Run beads
+bd/prime:
+	@misc/bin/bd prime
+
+# Show issues ready to work on
+bd/ready:
+	@misc/bin/bd ready
+
+# Claim issue
+bd/claim:
+	@misc/bin/bd update $(TASK_ID) --claim
+
+# Review issue details
+bd/show:
+	@misc/bin/bd show $(TASK_ID)
+
+# Create issues
+bd/create:
+	@misc/bin/bd --title $(TITLE) --description $(DESCRIPTION) --type=$(TYPE)
+
+# Close issues
+bd/close:
+	@misc/bin/bd close $(ISSUES) --reason $(REASON) --suggest-next
+
+# Search issues by keyword
+bd/search:
+	@misc/bin/bd search ${QUERY}
+
 install/tools:
 	@echo "Downloading misc tool dependencies..."
 	@for mod in misc/*-go.mod; do \
@@ -61,6 +93,8 @@ install/tools:
 	done
 	@echo "Installing typos..."
 	@bash misc/scripts/install-typos.sh
+	@echo "Installing beads..."
+	@bash misc/scripts/install-beads.sh
 	@echo "Installing lightpanda..."
 	@bash misc/scripts/install-lightpanda.sh
 

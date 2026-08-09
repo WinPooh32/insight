@@ -69,3 +69,44 @@ Strong success criteria let you loop independently. Weak criteria ("make it work
 
 **These guidelines are working if:** fewer unnecessary changes in diffs, fewer rewrites,
 and clarifying questions come before implementation.
+
+## 5. Tasks tracking
+
+This project uses bd (beads) for issue tracking.
+- Do not create MEMORY.md files.
+- Do not use markdown TODO lists for task tracking.
+
+## Core Rules
+- **Default**: Use beads for ALL task tracking (`make bd/create`, `make bd/ready`, `make bd/close`)
+- **Prohibited**: Do NOT use TodoWrite, TaskCreate, or markdown files for task tracking
+- **Workflow**: Create beads issue BEFORE writing code, claim it when starting
+- Persistence you don't need beats lost context
+- Git authority: no git operations in this context
+- Git workflow: stealth mode (no git ops)
+- Session management: check `make bd/ready` for available work
+
+### Creating & Updating
+
+#### New issue
+```bash
+make bd/create TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>"
+```
+
+#### Hierarchical child (task under epic, subtask under task; inherits parent labels)
+```bash
+make bd/create-child TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>" PARENT="<id>"
+```
+
+### Common Workflows
+
+#### Starting work
+```bash
+make bd/ready                 # Find available work
+make bd/show TASK_ID="<id>"   # Review issue details
+make bd/claim TASK_ID="<id>"  # Claim it
+```
+
+#### Completing work
+```bash
+make bd/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
+```
