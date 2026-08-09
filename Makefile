@@ -1,16 +1,16 @@
 -include .env
 
-.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/coverage gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
 
 ## Show available targets
 help:
 	@grep -E '^[a-zA-Z_/-]+:.*## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 ## Run all linters
-lint: lint/go lint/typos lint/md lint/arch lint/bd
+lint: lint/go lint/typos lint/md lint/arch lint/bd lint/untested
 
 ## Run ci linters
-lint/ci: lint/go lint/typos lint/md lint/arch
+lint/ci: lint/go lint/typos lint/md lint/arch lint/untested
 
 lint/go:
 	@echo "Run go linter"
@@ -31,6 +31,11 @@ lint/arch:
 lint/bd:
 	@echo "Run beads linter"
 	@misc/bin/bd lint
+
+## Check for packages without tests
+lint/untested:
+	@echo "Check for packages without tests"
+	@misc/scripts/find-untested-pkgs.sh
 
 ## Format all source files
 fmt: fmt/go fmt/golangci-lint fmt/md
@@ -119,6 +124,12 @@ test/mutesting:
 test/mutest-pkg:
 	@echo "Run mutation testing"
 	@go tool -modfile=misc/go-mutesting-go.mod go-mutesting --exec=misc/scripts/mutate-test.sh --config .mutesting.yml $(PACKAGE)
+
+## Coverage targets
+test/coverage:
+	@echo "Run tests with coverage"
+	@go tool -modfile=misc/gotestsum-go.mod gotestsum --format-hide-empty-pkg --format=pkgname-and-test-fails --format-icons=hivis -- -timeout=60s -coverprofile=coverage.out ./...
+	@go tool cover -func=coverage.out | tail -n 1
 
 ## Service targets
 gen/insight-storage:
