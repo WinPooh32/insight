@@ -65,15 +65,15 @@ install/tools:
 	@bash misc/scripts/install-lightpanda.sh
 
 ## Run all tests
-test: test/unit test/all test/mutesting
+test: test/all test/mutesting
 
 test/unit:
 	@echo "Run unit tests"
-	@go tool -modfile=misc/gotestsum-go.mod gotestsum -- -short -timeout=60s ./...
+	@go tool -modfile=misc/gotestsum-go.mod gotestsum --format-hide-empty-pkg --format=pkgname-and-test-fails --format-icons=hivis -- -short -timeout=60s ./...
 
 test/all:
 	@echo "Run all tests"
-	@go tool -modfile=misc/gotestsum-go.mod gotestsum -- -timeout=60s ./...
+	@go tool -modfile=misc/gotestsum-go.mod gotestsum --format-hide-empty-pkg --format=pkgname-and-test-fails --format-icons=hivis -- -timeout=60s ./...
 
 test/mutesting:
 	@echo "Run mutation testing"
