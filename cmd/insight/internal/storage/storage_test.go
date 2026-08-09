@@ -12,45 +12,22 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
+	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 
 	_ "modernc.org/sqlite"
 )
 
-const (
-	testSessionID     = "session_id"
-	eventSessionStart = "SessionStart"
-	eventUserPrompt   = "UserPromptSubmit"
-)
-
-func setupTestStorage(t *testing.T) *storage.SQLiteStorage {
-	t.Helper()
-
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := slog.New(slog.DiscardHandler)
-
-	storageInst, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
-
-	t.Cleanup(func() { storageInst.Close() })
-
-	return storageInst
-}
-
 func TestStoreAndRecent(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store an event
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{
-		testSessionID: "test-session-1",
-		"prompt":      "hello",
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{
+		testutil.TestSessionID: "test-session-1",
+		"prompt":               "hello",
 	})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event: %v", err)
@@ -66,20 +43,20 @@ func TestStoreAndRecent(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(eventList))
 	}
 
-	if eventList[0].EventType != eventSessionStart {
-		t.Errorf("expected event type %q, got %q", eventSessionStart, eventList[0].EventType)
+	if eventList[0].EventType != testutil.EventSessionStart {
+		t.Errorf("expected event type %q, got %q", testutil.EventSessionStart, eventList[0].EventType)
 	}
 }
 
 func TestStoreEmptySessionID(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store event without session_id
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{
 		"prompt": "hello",
 	})
 	if err := storageInst.Store(ctx, evt); err != nil {
@@ -102,42 +79,65 @@ func TestStoreEmptySessionID(t *testing.T) {
 	}
 }
 
-func TestRecentLimitZero(t *testing.T) {
+func TestRecentLimitBoundary(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store an event
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{})
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event: %v", err)
 	}
 
-	// Fetch with limit=0 should return empty
-	eventList, err := storageInst.Recent(ctx, 0)
-	if err != nil {
-		t.Fatalf("failed to get recent events with limit 0: %v", err)
+	tests := []struct {
+		name      string
+		limit     int
+		expectLen int
+		expectErr bool
+	}{
+		{"limit=0 returns empty", 0, 0, false},
+		{"limit=-1 returns error", -1, 0, true},
 	}
 
-	if len(eventList) != 0 {
-		t.Errorf("expected 0 events with limit=0, got %d", len(eventList))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			eventList, err := storageInst.Recent(ctx, tc.limit)
+			if tc.expectErr {
+				if err == nil {
+					t.Error("expected error for negative limit")
+				}
+
+				return
+			}
+
+			if err != nil {
+				t.Fatalf("failed to get recent events: %v", err)
+			}
+
+			if len(eventList) != tc.expectLen {
+				t.Errorf("expected %d events, got %d", tc.expectLen, len(eventList))
+			}
+		})
 	}
 }
 
 func TestDataIntegrity(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store event with known values
-	evt := events.NewEnvelope(eventUserPrompt, map[string]any{
-		testSessionID: "integrity-session",
-		"prompt":      "test payload",
-		"nested":      map[string]any{"key": "value"},
+	evt := events.NewEnvelope(testutil.EventUserPrompt, map[string]any{
+		testutil.TestSessionID: "integrity-session",
+		"prompt":               "test payload",
+		"nested":               map[string]any{"key": "value"},
 	})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event: %v", err)
@@ -155,8 +155,8 @@ func TestDataIntegrity(t *testing.T) {
 
 	stored := eventList[0]
 
-	if stored.EventType != eventUserPrompt {
-		t.Errorf("expected event type %q, got %q", eventUserPrompt, stored.EventType)
+	if stored.EventType != testutil.EventUserPrompt {
+		t.Errorf("expected event type %q, got %q", testutil.EventUserPrompt, stored.EventType)
 	}
 
 	if stored.SessionID == nil || *stored.SessionID != "integrity-session" {
@@ -172,14 +172,14 @@ func TestDataIntegrity(t *testing.T) {
 func TestBySession(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store events for two sessions
 	for _, sessionID := range []string{"session-a", "session-b", "session-a"} {
-		evt := events.NewEnvelope(eventUserPrompt, map[string]any{
-			testSessionID: sessionID,
+		evt := events.NewEnvelope(testutil.EventUserPrompt, map[string]any{
+			testutil.TestSessionID: sessionID,
 		})
 		if err := storageInst.Store(ctx, evt); err != nil {
 			t.Fatalf("failed to store event: %v", err)
@@ -197,33 +197,55 @@ func TestBySession(t *testing.T) {
 	}
 }
 
-func TestBySessionEmptyResults(t *testing.T) {
+func TestQueryEmptyResults(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
-
-	ctx := context.Background()
-
-	// Query a session that doesn't exist - should return empty, not error
-	eventList, err := storageInst.BySession(ctx, "nonexistent-session")
-	if err != nil {
-		t.Fatalf("expected no error for nonexistent session, got %v", err)
+	tests := []struct {
+		name string
+		q    func(*storage.SQLiteStorage, context.Context) ([]events.StoredEvent, error)
+	}{
+		{
+			name: "BySession nonexistent",
+			q: func(s *storage.SQLiteStorage, ctx context.Context) ([]events.StoredEvent, error) {
+				return s.BySession(ctx, "nonexistent-session")
+			},
+		},
+		{
+			name: "ByType nonexistent",
+			q: func(s *storage.SQLiteStorage, ctx context.Context) ([]events.StoredEvent, error) {
+				return s.ByType(ctx, "NonExistentType", 10, 0)
+			},
+		},
 	}
 
-	if len(eventList) != 0 {
-		t.Errorf("expected 0 events for nonexistent session, got %d", len(eventList))
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			storageInst := testutil.NewTestStorage(t)
+			ctx := context.Background()
+
+			eventList, err := tc.q(storageInst, ctx)
+			if err != nil {
+				t.Fatalf("expected no error, got %v", err)
+			}
+
+			if len(eventList) != 0 {
+				t.Errorf("expected 0 events, got %d", len(eventList))
+			}
+		})
 	}
 }
 
 func TestByType(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store events of different types
-	for _, eventType := range []string{eventSessionStart, eventUserPrompt, eventUserPrompt} {
+	for _, eventType := range []string{testutil.EventSessionStart, testutil.EventUserPrompt, testutil.EventUserPrompt} {
 		evt := events.NewEnvelope(eventType, map[string]any{})
 		if err := storageInst.Store(ctx, evt); err != nil {
 			t.Fatalf("failed to store event: %v", err)
@@ -231,38 +253,20 @@ func TestByType(t *testing.T) {
 	}
 
 	// Query by type
-	eventList, err := storageInst.ByType(ctx, eventUserPrompt, 10, 0)
+	eventList, err := storageInst.ByType(ctx, testutil.EventUserPrompt, 10, 0)
 	if err != nil {
 		t.Fatalf("failed to query by type: %v", err)
 	}
 
 	if len(eventList) != 2 {
-		t.Fatalf("expected 2 %s events, got %d", eventUserPrompt, len(eventList))
-	}
-}
-
-func TestByTypeEmptyResults(t *testing.T) {
-	t.Parallel()
-
-	storageInst := setupTestStorage(t)
-
-	ctx := context.Background()
-
-	// Query a type that doesn't exist - should return empty, not error
-	eventList, err := storageInst.ByType(ctx, "NonExistentType", 10, 0)
-	if err != nil {
-		t.Fatalf("expected no error for nonexistent type, got %v", err)
-	}
-
-	if len(eventList) != 0 {
-		t.Errorf("expected 0 events for nonexistent type, got %d", len(eventList))
+		t.Fatalf("expected 2 %s events, got %d", testutil.EventUserPrompt, len(eventList))
 	}
 }
 
 func TestCount(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
@@ -277,7 +281,7 @@ func TestCount(t *testing.T) {
 	}
 
 	// Store an event and check count
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{})
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event: %v", err)
 	}
@@ -295,13 +299,13 @@ func TestCount(t *testing.T) {
 func TestCountAfterMultipleStores(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store multiple events and verify count each time
 	for i := range 5 {
-		evt := events.NewEnvelope(eventUserPrompt, map[string]any{
+		evt := events.NewEnvelope(testutil.EventUserPrompt, map[string]any{
 			"index": strconv.Itoa(i),
 		})
 		if err := storageInst.Store(ctx, evt); err != nil {
@@ -355,7 +359,7 @@ func TestStorageAfterClose(t *testing.T) {
 	ctx := context.Background()
 
 	// Store an event before close
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{testSessionID: "test"})
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{testutil.TestSessionID: "test"})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event before close: %v", err)
 	}
@@ -396,7 +400,7 @@ func TestStorageAfterClose(t *testing.T) {
 	}
 }
 
-func TestStoreLogsSuccess(t *testing.T) {
+func TestStorageLogging(t *testing.T) {
 	t.Parallel()
 
 	tmpDir := t.TempDir()
@@ -412,10 +416,15 @@ func TestStoreLogsSuccess(t *testing.T) {
 	}
 	defer storageInst.Close()
 
-	ctx := context.Background()
+	// Verify that initialization was logged (kills mutation .17 which removes logger.Info)
+	if !strings.Contains(logBuf.String(), "sqlite storage initialized") {
+		t.Errorf("expected 'sqlite storage initialized' in log output, got: %s", logBuf.String())
+	}
 
 	// Store an event
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{testSessionID: "log-test"})
+	ctx := context.Background()
+
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{testutil.TestSessionID: "log-test"})
 	if err := storageInst.Store(ctx, evt); err != nil {
 		t.Fatalf("failed to store event: %v", err)
 	}
@@ -449,7 +458,7 @@ func TestStoreLogsErrorAfterClose(t *testing.T) {
 	}
 
 	// Store after close should fail and log an error
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{testSessionID: "log-test"})
+	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{testutil.TestSessionID: "log-test"})
 	_ = storageInst.Store(ctx, evt)
 
 	// Verify that "failed to store event" was logged (kills mutation .24 which removes ErrorContext)
@@ -492,15 +501,15 @@ func TestCountReturnsZeroOnError(t *testing.T) {
 func TestRecentOffsetZero(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store 5 events
 	for i := range 5 {
-		evt := events.NewEnvelope(eventUserPrompt, map[string]any{
-			testSessionID: "offset-test",
-			"index":       strconv.Itoa(i),
+		evt := events.NewEnvelope(testutil.EventUserPrompt, map[string]any{
+			testutil.TestSessionID: "offset-test",
+			"index":                strconv.Itoa(i),
 		})
 		if err := storageInst.Store(ctx, evt); err != nil {
 			t.Fatalf("failed to store event %d: %v", i, err)
@@ -529,52 +538,10 @@ func TestRecentOffsetZero(t *testing.T) {
 	}
 }
 
-func TestConstructorLogsInit(t *testing.T) {
-	t.Parallel()
-
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	var logBuf bytes.Buffer
-
-	logger := slog.New(slog.NewTextHandler(&logBuf, nil))
-
-	storageInst, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
-	defer storageInst.Close()
-
-	// Verify that initialization was logged (kills mutation .17 which removes logger.Info)
-	if !strings.Contains(logBuf.String(), "sqlite storage initialized") {
-		t.Errorf("expected 'sqlite storage initialized' in log output, got: %s", logBuf.String())
-	}
-}
-
-func TestRecentNegativeLimit(t *testing.T) {
-	t.Parallel()
-
-	storageInst := setupTestStorage(t)
-
-	ctx := context.Background()
-
-	// Store an event
-	evt := events.NewEnvelope(eventSessionStart, map[string]any{})
-	if err := storageInst.Store(ctx, evt); err != nil {
-		t.Fatalf("failed to store event: %v", err)
-	}
-
-	// Negative limit should return an error
-	_, err := storageInst.Recent(ctx, -1)
-	if err == nil {
-		t.Error("expected error for negative limit")
-	}
-}
-
 func TestByTypeNegativeLimit(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
@@ -594,15 +561,15 @@ func TestByTypeNegativeLimit(t *testing.T) {
 func TestByTypeOffsetPagination(t *testing.T) {
 	t.Parallel()
 
-	storageInst := setupTestStorage(t)
+	storageInst := testutil.NewTestStorage(t)
 
 	ctx := context.Background()
 
 	// Store 4 events with distinct identifiers
 	for i := range 4 {
-		evt := events.NewEnvelope(eventUserPrompt, map[string]any{
-			testSessionID: "pagination-test",
-			"index":       strconv.Itoa(i),
+		evt := events.NewEnvelope(testutil.EventUserPrompt, map[string]any{
+			testutil.TestSessionID: "pagination-test",
+			"index":                strconv.Itoa(i),
 		})
 		if err := storageInst.Store(ctx, evt); err != nil {
 			t.Fatalf("failed to store event %d: %v", i, err)
@@ -610,7 +577,7 @@ func TestByTypeOffsetPagination(t *testing.T) {
 	}
 
 	// Get first page with offset=0, limit=2
-	page1, err := storageInst.ByType(ctx, eventUserPrompt, 2, 0)
+	page1, err := storageInst.ByType(ctx, testutil.EventUserPrompt, 2, 0)
 	if err != nil {
 		t.Fatalf("failed to get first page: %v", err)
 	}
@@ -620,7 +587,7 @@ func TestByTypeOffsetPagination(t *testing.T) {
 	}
 
 	// Get second page with offset=2, limit=2
-	page2, err := storageInst.ByType(ctx, eventUserPrompt, 2, 2)
+	page2, err := storageInst.ByType(ctx, testutil.EventUserPrompt, 2, 2)
 	if err != nil {
 		t.Fatalf("failed to get second page: %v", err)
 	}
@@ -635,7 +602,7 @@ func TestByTypeOffsetPagination(t *testing.T) {
 	}
 
 	// Third page should be empty
-	page3, err := storageInst.ByType(ctx, eventUserPrompt, 2, 4)
+	page3, err := storageInst.ByType(ctx, testutil.EventUserPrompt, 2, 4)
 	if err != nil {
 		t.Fatalf("failed to get third page: %v", err)
 	}

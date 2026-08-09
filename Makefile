@@ -87,7 +87,7 @@ bd/create:
 
 # Close issues
 bd/close:
-	@misc/bin/bd close $(ISSUES) --reason $(REASON) --suggest-next
+	@misc/bin/bd close $(ISSUES) --reason $(REASON)
 
 # Search issues by keyword
 bd/search:

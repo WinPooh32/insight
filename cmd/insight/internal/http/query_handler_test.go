@@ -1,92 +1,35 @@
 package httphandler_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
-	"io"
-	"log/slog"
 	"net/http"
-	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
-	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
-	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
-
-	_ "modernc.org/sqlite"
+	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
 
 const eventsPath = "/hooks/v1/events"
 
-func setupTestQueryRouter(t *testing.T) http.Handler {
-	t.Helper()
-
-	tmpDir := t.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := slog.New(slog.DiscardHandler)
-
-	storageInst, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger)
-	if err != nil {
-		t.Fatalf("failed to create storage: %v", err)
-	}
-
-	t.Cleanup(func() { storageInst.Close() })
-
-	return insighthttp.Router(storageInst, logger)
-}
-
 func TestListEvents(t *testing.T) {
 	t.Parallel()
 
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
+	server := testutil.NewTestEnv(t)
 
 	// Post an event first
-	payload := map[string]any{
-		testSessionID: "test-session",
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		t.Fatalf("failed to marshal payload: %v", err)
-	}
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
-		server.URL+userPrompt, bytes.NewReader(body))
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	if resp, err := http.DefaultClient.Do(req); err != nil {
-		t.Fatalf("failed to post event: %v", err)
-	} else {
+	{
+		resp := testutil.PostJSON(t, server, userPrompt, map[string]any{
+			testutil.TestSessionID: "test-session",
+		})
 		resp.Body.Close()
 	}
 
 	// List events
-	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+eventsPath, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
+	resp := testutil.Get(t, server, eventsPath)
+	testutil.AssertStatus(t, resp, http.StatusOK)
 
 	if resp.Header.Get("Content-Type") != "application/json" {
 		t.Errorf("expected Content-Type application/json, got %q", resp.Header.Get("Content-Type"))
@@ -97,370 +40,23 @@ func TestListEvents(t *testing.T) {
 		t.Fatalf("failed to decode events: %v", err)
 	}
 
+	resp.Body.Close()
+
 	if len(eventList) != 1 {
 		t.Errorf("expected 1 event, got %d", len(eventList))
 	}
 }
 
-func TestListEventsLimitBoundary(t *testing.T) {
+func TestListEventsLimits(t *testing.T) {
 	t.Parallel()
 
-	router := setupTestQueryRouter(t)
+	server := testutil.NewTestEnv(t)
 
-	server := httptest.NewServer(router)
-	t.Cleanup(server.Close)
-
-	// Post several events
-	for i := range 5 {
-		payload := map[string]any{
-			testSessionID: "test-session",
-			"index":       float64(i),
-		}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+userPrompt, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	numEvents := 5
-
-	tests := []struct {
-		name       string
-		limit      string
-		expectLen  int
-		expectCode int
-	}{
-		{"limit=0 uses default", "0", numEvents, http.StatusOK},
-		{"limit=1001 uses default", "1001", numEvents, http.StatusOK},
-		{"limit=abc uses default", "abc", numEvents, http.StatusOK},
-		{"limit=2 returns 2", "2", 2, http.StatusOK},
-		{"limit=5 returns all 5", "5", numEvents, http.StatusOK},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-
-			url := server.URL + eventsPath + "?limit=" + tc.limit
-
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, url, nil)
-			if err != nil {
-				t.Fatalf("failed to create request: %v", err)
-			}
-
-			resp, err := http.DefaultClient.Do(req)
-			if err != nil {
-				t.Fatalf("failed to list events: %v", err)
-			}
-			defer resp.Body.Close()
-
-			if resp.StatusCode != tc.expectCode {
-				t.Errorf("expected status %d, got %d", tc.expectCode, resp.StatusCode)
-			}
-
-			var events []events.StoredEvent
-			if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-				t.Fatalf("failed to decode events: %v", err)
-			}
-
-			if len(events) != tc.expectLen {
-				t.Errorf("expected %d events, got %d", tc.expectLen, len(events))
-			}
+	// Post 60 events to test all limit boundaries
+	for range 60 {
+		resp := testutil.PostJSON(t, server, messageDisp, map[string]any{
+			testutil.TestSessionID: "test-session",
 		})
-	}
-}
-
-func TestListEventsEventTypeFilter(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post events of different types
-	payload1 := map[string]any{testSessionID: "sess-1"}
-
-	body1, err := json.Marshal(payload1)
-	if err != nil {
-		t.Fatalf("failed to marshal payload1: %v", err)
-	}
-
-	req1, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-		server.URL+sessionStart, bytes.NewReader(body1))
-	req1.Header.Set("Content-Type", "application/json")
-	resp1, _ := http.DefaultClient.Do(req1)
-	resp1.Body.Close()
-
-	for range 2 {
-		payload2 := map[string]any{testSessionID: "sess-1", "prompt": "hello"}
-
-		body2, err := json.Marshal(payload2)
-		if err != nil {
-			t.Fatalf("failed to marshal payload2: %v", err)
-		}
-
-		req2, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+userPrompt, bytes.NewReader(body2))
-		req2.Header.Set("Content-Type", "application/json")
-		resp2, _ := http.DefaultClient.Do(req2)
-		resp2.Body.Close()
-	}
-
-	// Filter by SessionStart
-	getURL := server.URL + eventsPath + "?event_type=SessionStart"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 1 {
-		t.Errorf("expected 1 SessionStart event, got %d", len(events))
-	}
-
-	if len(events) > 0 && events[0].EventType != "SessionStart" {
-		t.Errorf("expected event type SessionStart, got %q", events[0].EventType)
-	}
-}
-
-func TestListEventsOffset(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post 3 events
-	for range 3 {
-		payload := map[string]any{testSessionID: "test-session"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+messageDisp, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	// Get with offset=1, limit=2
-	getURL := server.URL + eventsPath + "?limit=2&offset=1"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 2 {
-		t.Errorf("expected 2 events with offset=1 limit=2, got %d", len(events))
-	}
-}
-
-func TestSessionEvents(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post events for a session
-	for i := range 3 {
-		payload := map[string]any{
-			testSessionID: "session-abc",
-			"index":       float64(i),
-		}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+messageDisp, bytes.NewReader(body))
-		if err != nil {
-			t.Fatalf("failed to create request: %v", err)
-		}
-
-		req.Header.Set("Content-Type", "application/json")
-
-		if resp, err := http.DefaultClient.Do(req); err != nil {
-			t.Fatalf("failed to post event: %v", err)
-		} else {
-			resp.Body.Close()
-		}
-	}
-
-	// Query session events
-	sessionURL, _ := url.JoinPath(server.URL, eventsPath, "session", "session-abc")
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sessionURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to get session events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		t.Errorf("expected status 200, got %d", resp.StatusCode)
-	}
-
-	if resp.Header.Get("Content-Type") != "application/json" {
-		t.Errorf("expected Content-Type application/json, got %q", resp.Header.Get("Content-Type"))
-	}
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 3 {
-		t.Errorf("expected 3 events, got %d", len(events))
-	}
-}
-
-func TestSessionEventsEmptySessionID(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Query session events with empty session_id
-	// The router pattern {session_id} won't match empty path, so we get 404
-	sessionURL, _ := url.JoinPath(server.URL, eventsPath, "session", "")
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sessionURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to get session events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	// The router doesn't match empty {session_id}, so we get 404
-	if resp.StatusCode != http.StatusNotFound {
-		t.Errorf("expected status 404, got %d", resp.StatusCode)
-	}
-}
-
-func TestListEventsDefaultLimitExact(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post 60 events to test default limit of 50
-	for range 60 {
-		payload := map[string]any{testSessionID: "test-session"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+messageDisp, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	// No limit → default of 50
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+eventsPath, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 50 {
-		t.Errorf("expected exactly 50 events (default limit), got %d", len(events))
-	}
-}
-
-func TestListEventsLimitMaxBoundary(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	t.Cleanup(server.Close)
-
-	// Post 60 events to test max limit boundary
-	for range 60 {
-		payload := map[string]any{testSessionID: "test-session"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+messageDisp, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
 		resp.Body.Close()
 	}
 
@@ -469,8 +65,10 @@ func TestListEventsLimitMaxBoundary(t *testing.T) {
 		limit     string
 		expectLen int
 	}{
-		{"limit=1000 uses 1000 (not default)", "1000", 60},
-		{"limit=1001 uses default 50", "1001", 50},
+		{"limit=0 uses default", "0", 50},
+		{"limit=1001 uses default", "1001", 50},
+		{"limit=abc uses default", "abc", 50},
+		{"limit=1000 uses 1000", "1000", 60},
 		{"limit=999 uses 999", "999", 60},
 		{"limit=3 returns 3", "3", 3},
 	}
@@ -479,256 +77,304 @@ func TestListEventsLimitMaxBoundary(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 
-			getURL := server.URL + eventsPath + "?limit=" + tc.limit
+			getURL := eventsPath + "?limit=" + tc.limit
+			resp := testutil.Get(t, server, getURL)
+			testutil.AssertStatus(t, resp, http.StatusOK)
 
-			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
+			var eventList []events.StoredEvent
+			if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
+				t.Fatalf("failed to decode events: %v", err)
+			}
+
+			resp.Body.Close()
+
+			if len(eventList) != tc.expectLen {
+				t.Errorf("expected %d events, got %d", tc.expectLen, len(eventList))
+			}
+		})
+	}
+}
+
+func TestListEventsEventTypeFilter(t *testing.T) {
+	t.Parallel()
+
+	server := testutil.NewTestEnv(t)
+
+	// Post 1 SessionStart + 2 UserPromptSubmit
+	{
+		resp := testutil.PostJSON(t, server, sessionStart, map[string]any{
+			testutil.TestSessionID: "sess-1",
+		})
+		resp.Body.Close()
+	}
+
+	for range 2 {
+		resp := testutil.PostJSON(t, server, userPrompt, map[string]any{
+			testutil.TestSessionID: "sess-1",
+			"prompt":               "hello",
+		})
+		resp.Body.Close()
+	}
+
+	tests := []struct {
+		name       string
+		filter     string
+		expectN    int
+		expectType string
+	}{
+		{"filter SessionStart returns 1", "SessionStart", 1, "SessionStart"},
+		{"filter UserPromptSubmit returns 2", "UserPromptSubmit", 2, "UserPromptSubmit"},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			getURL := eventsPath + "?event_type=" + tc.filter
+			resp := testutil.Get(t, server, getURL)
+			testutil.AssertStatus(t, resp, http.StatusOK)
+
+			var eventList []events.StoredEvent
+			if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
+				t.Fatalf("failed to decode events: %v", err)
+			}
+
+			resp.Body.Close()
+
+			if len(eventList) != tc.expectN {
+				t.Errorf("expected %d %s events, got %d", tc.expectN, tc.filter, len(eventList))
+			}
+
+			// Verify ALL returned events match the filter
+			for _, e := range eventList {
+				if e.EventType != tc.expectType {
+					t.Errorf("expected all events to be %s, got %q", tc.expectType, e.EventType)
+				}
+			}
+		})
+	}
+}
+
+func TestListEventsOffset(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		postN     int
+		getURL    string
+		expectLen int
+	}{
+		{
+			name:      "offset=1 limit=2 returns 2",
+			postN:     3,
+			getURL:    eventsPath + "?limit=2&offset=1",
+			expectLen: 2,
+		},
+		{
+			name:      "default offset returns all",
+			postN:     3,
+			getURL:    eventsPath + "?limit=10",
+			expectLen: 3,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := testutil.NewTestEnv(t)
+
+			// Post events
+			for range tc.postN {
+				resp := testutil.PostJSON(t, server, messageDisp, map[string]any{
+					testutil.TestSessionID: "test-session",
+				})
+				resp.Body.Close()
+			}
+
+			resp := testutil.Get(t, server, tc.getURL)
+			testutil.AssertStatus(t, resp, http.StatusOK)
+
+			var eventList []events.StoredEvent
+			if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
+				t.Fatalf("failed to decode events: %v", err)
+			}
+
+			resp.Body.Close()
+
+			if len(eventList) != tc.expectLen {
+				t.Errorf("expected %d events, got %d", tc.expectLen, len(eventList))
+			}
+		})
+	}
+}
+
+func TestSessionEvents(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		postEvents   bool
+		sessionID    string
+		expectCode   int
+		expectEvents int
+	}{
+		{
+			name:         "existing session returns events",
+			postEvents:   true,
+			sessionID:    "session-abc",
+			expectCode:   http.StatusOK,
+			expectEvents: 3,
+		},
+		{
+			name:         "empty session ID returns 404",
+			postEvents:   false,
+			sessionID:    "",
+			expectCode:   http.StatusNotFound,
+			expectEvents: 0,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			server := testutil.NewTestEnv(t)
+
+			if tc.postEvents {
+				for i := range 3 {
+					resp := testutil.PostJSON(t, server, messageDisp, map[string]any{
+						testutil.TestSessionID: tc.sessionID,
+						"index":                float64(i),
+					})
+					resp.Body.Close()
+				}
+			}
+
+			sessionURL, _ := url.JoinPath(server.URL, eventsPath, "session", tc.sessionID)
+
+			req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, sessionURL, nil)
 			if err != nil {
 				t.Fatalf("failed to create request: %v", err)
 			}
 
 			resp, err := http.DefaultClient.Do(req)
 			if err != nil {
-				t.Fatalf("failed to list events: %v", err)
+				t.Fatalf("failed to get session events: %v", err)
 			}
+
 			defer resp.Body.Close()
 
-			if resp.StatusCode != http.StatusOK {
-				t.Errorf("expected status 200, got %d", resp.StatusCode)
+			if resp.StatusCode != tc.expectCode {
+				t.Errorf("expected status %d, got %d", tc.expectCode, resp.StatusCode)
 			}
 
-			var events []events.StoredEvent
-			if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
+			if tc.expectCode != http.StatusOK {
+				return
+			}
+
+			if resp.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("expected Content-Type application/json, got %q", resp.Header.Get("Content-Type"))
+			}
+
+			var eventList []events.StoredEvent
+			if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
 				t.Fatalf("failed to decode events: %v", err)
 			}
 
-			if len(events) != tc.expectLen {
-				t.Errorf("expected %d events, got %d", tc.expectLen, len(events))
+			if len(eventList) != tc.expectEvents {
+				t.Errorf("expected %d events, got %d", tc.expectEvents, len(eventList))
 			}
 		})
+	}
+}
+
+func TestListEventsDefaultLimitExact(t *testing.T) {
+	t.Parallel()
+
+	server := testutil.NewTestEnv(t)
+
+	// Post 60 events to test default limit of 50
+	for range 60 {
+		resp := testutil.PostJSON(t, server, messageDisp, map[string]any{
+			testutil.TestSessionID: "test-session",
+		})
+		resp.Body.Close()
+	}
+
+	// No limit → default of 50
+	resp := testutil.Get(t, server, eventsPath)
+
+	var eventList []events.StoredEvent
+	if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
+		t.Fatalf("failed to decode events: %v", err)
+	}
+
+	resp.Body.Close()
+
+	if len(eventList) != 50 {
+		t.Errorf("expected exactly 50 events (default limit), got %d", len(eventList))
 	}
 }
 
 func TestListEventsOffsetSkipsEvents(t *testing.T) {
 	t.Parallel()
 
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
+	server := testutil.NewTestEnv(t)
 
 	// Post 3 UserPromptSubmit events to test offset with ByType
 	for range 3 {
-		payload := map[string]any{testSessionID: "test-session"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+userPrompt, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
+		resp := testutil.PostJSON(t, server, userPrompt, map[string]any{
+			testutil.TestSessionID: "test-session",
+		})
 		resp.Body.Close()
 	}
 
 	// Get first event without offset (using event_type to trigger ByType which supports offset)
-	getURL := server.URL + eventsPath + "?event_type=UserPromptSubmit&limit=1"
+	resp1 := testutil.Get(t, server, eventsPath+"?event_type=UserPromptSubmit&limit=1")
 
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp1, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-
-	var events1 []events.StoredEvent
-	if err := json.NewDecoder(resp1.Body).Decode(&events1); err != nil {
+	var eventList1 []events.StoredEvent
+	if err := json.NewDecoder(resp1.Body).Decode(&eventList1); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
 
 	resp1.Body.Close()
 
-	if len(events1) != 1 {
-		t.Fatalf("expected 1 event, got %d", len(events1))
+	if len(eventList1) != 1 {
+		t.Fatalf("expected 1 event, got %d", len(eventList1))
 	}
 
 	// Get second event with offset=1
-	getURL = server.URL + eventsPath + "?event_type=UserPromptSubmit&limit=1&offset=1"
+	resp2 := testutil.Get(t, server, eventsPath+"?event_type=UserPromptSubmit&limit=1&offset=1")
 
-	req, err = http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp2, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-
-	var events2 []events.StoredEvent
-	if err := json.NewDecoder(resp2.Body).Decode(&events2); err != nil {
+	var eventList2 []events.StoredEvent
+	if err := json.NewDecoder(resp2.Body).Decode(&eventList2); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
 
 	resp2.Body.Close()
 
-	if len(events2) != 1 {
-		t.Fatalf("expected 1 event with offset=1, got %d", len(events2))
+	if len(eventList2) != 1 {
+		t.Fatalf("expected 1 event with offset=1, got %d", len(eventList2))
 	}
 
 	// The events should be different (offset should skip the first)
-	if events1[0].ID == events2[0].ID {
+	if eventList1[0].ID == eventList2[0].ID {
 		t.Error("offset=1 should return a different event than offset=0")
-	}
-}
-
-func TestListEventsEventTypeFilterAllMatch(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post events of different types
-	for range 3 {
-		payload := map[string]any{testSessionID: "sess-1"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+sessionStart, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	for range 2 {
-		payload := map[string]any{testSessionID: "sess-1", "prompt": "hello"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+userPrompt, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	// Filter by UserPromptSubmit and verify ALL match
-	getURL := server.URL + eventsPath + "?event_type=UserPromptSubmit&limit=10"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 2 {
-		t.Errorf("expected 2 UserPromptSubmit events, got %d", len(events))
-	}
-
-	// Verify ALL returned events match the filter
-	for _, e := range events {
-		if e.EventType != "UserPromptSubmit" {
-			t.Errorf("expected all events to be UserPromptSubmit, got %q", e.EventType)
-		}
-	}
-}
-
-func TestListEventsDefaultOffset(t *testing.T) {
-	t.Parallel()
-
-	router := setupTestQueryRouter(t)
-
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	// Post 3 events
-	for range 3 {
-		payload := map[string]any{testSessionID: "test-session"}
-
-		body, err := json.Marshal(payload)
-		if err != nil {
-			t.Fatalf("failed to marshal payload: %v", err)
-		}
-
-		req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-			server.URL+messageDisp, bytes.NewReader(body))
-		req.Header.Set("Content-Type", "application/json")
-		resp, _ := http.DefaultClient.Do(req)
-		resp.Body.Close()
-	}
-
-	// Get events without offset - should return all 3 (offset defaults to 0)
-	// Mutation .19 changes default offset from 0 to -1
-	getURL := server.URL + eventsPath + "?limit=10"
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, getURL, nil)
-	if err != nil {
-		t.Fatalf("failed to create request: %v", err)
-	}
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to list events: %v", err)
-	}
-	defer resp.Body.Close()
-
-	var events []events.StoredEvent
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
-		t.Fatalf("failed to decode events: %v", err)
-	}
-
-	if len(events) != 3 {
-		t.Errorf("expected 3 events with default offset, got %d", len(events))
 	}
 }
 
 func TestHandleEventInvalidJSONBody(t *testing.T) {
 	t.Parallel()
 
-	router := setupTestRouter(t)
+	server := testutil.NewTestEnv(t)
 
-	server := httptest.NewServer(router)
-	defer server.Close()
-
-	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
-		server.URL+sessionStart, bytes.NewReader([]byte("not json at all")))
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		t.Fatalf("failed to post event: %v", err)
-	}
+	resp := testutil.PostRaw(t, server, sessionStart, []byte("not json at all"))
 	defer resp.Body.Close()
 
-	if resp.StatusCode != http.StatusBadRequest {
-		t.Errorf("expected status 400, got %d", resp.StatusCode)
-	}
+	testutil.AssertStatus(t, resp, http.StatusBadRequest)
 
-	// Verify the error response body contains expected error message
-	body, _ := io.ReadAll(resp.Body)
+	body := testutil.ReadBody(resp)
 	if !strings.Contains(string(body), "invalid JSON") {
 		t.Errorf("expected 'invalid JSON' in response body, got: %s", string(body))
 	}
