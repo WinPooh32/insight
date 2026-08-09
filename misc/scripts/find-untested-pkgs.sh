@@ -9,7 +9,7 @@ ROOT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 MODULE="github.com/WinPooh32/insight"
 
 # Directories to exclude from the report.
-EXCLUDE_DIRS=("db" "migrations" "config")
+EXCLUDE_DIRS=("db" "migrations" "config" "cmd/insight")
 
 cd "$ROOT_DIR"
 
