@@ -32,6 +32,8 @@ func TestCamelToKebab(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.input, func(t *testing.T) {
+			t.Parallel()
+
 			result := events.CamelToKebab(tc.input)
 			if result != tc.expected {
 				t.Errorf("CamelToKebab(%q) = %q, want %q", tc.input, result, tc.expected)
@@ -58,6 +60,8 @@ func TestHookEndpoint(t *testing.T) {
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
 			result := events.HookEndpoint(tc.event)
 			if result != tc.expected {
 				t.Errorf("HookEndpoint(%q) = %q, want %q", tc.event, result, tc.expected)

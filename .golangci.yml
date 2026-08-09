@@ -112,3 +112,6 @@ linters:
       - common-false-positives
       - legacy
       - std-error-handling
+    rules:
+      - linters: [cyclop, funlen, goconst]
+        path: _test\.go

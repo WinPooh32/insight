@@ -185,6 +185,8 @@ func TestHandleEventMultipleTypes(t *testing.T) {
 
 	for _, endpoint := range endpoints {
 		t.Run(endpoint, func(t *testing.T) {
+			t.Parallel()
+
 			payload := map[string]any{
 				testSessionID: "test-session",
 				"data":        "test",
@@ -227,7 +229,11 @@ func TestHandleEventMaxPayloadSize(t *testing.T) {
 	// Create a payload larger than 1MB (maxPayloadBytes)
 	largePayload := make(map[string]any)
 	largePayload["data"] = string(make([]byte, 1_100_000))
-	body, _ := json.Marshal(largePayload)
+
+	body, err := json.Marshal(largePayload)
+	if err != nil {
+		t.Fatalf("failed to marshal large payload: %v", err)
+	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		server.URL+sessionStart, bytes.NewReader(body))
@@ -261,7 +267,11 @@ func TestHandleEventLargePayloadAccepted(t *testing.T) {
 	// This should be accepted. Kills mutations that reduce maxPayloadBytes.
 	data := strings.Repeat("A", 900_000) // ~900KB of 'A's, under 1MB after JSON encoding
 	largePayload := map[string]any{"data": data}
-	body, _ := json.Marshal(largePayload)
+
+	body, err := json.Marshal(largePayload)
+	if err != nil {
+		t.Fatalf("failed to marshal large payload: %v", err)
+	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		server.URL+sessionStart, bytes.NewReader(body))
@@ -295,7 +305,11 @@ func TestHandleEventNoSessionID(t *testing.T) {
 		"prompt": "hello world",
 		"data":   "test",
 	}
-	body, _ := json.Marshal(payload)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		server.URL+sessionStart, bytes.NewReader(body))
@@ -394,7 +408,11 @@ func TestHandleEventLogsSuccess(t *testing.T) {
 		testSessionID: "test-session-123",
 		"prompt":      "hello world",
 	}
-	body, _ := json.Marshal(payload)
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		t.Fatalf("failed to marshal payload: %v", err)
+	}
 
 	req, _ := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		server.URL+sessionStart, bytes.NewReader(body))
@@ -454,7 +472,11 @@ func TestHandleEventPayload2MBRejected(t *testing.T) {
 	// This should be rejected even if maxPayloadBytes is mutated to 2<<20 or 1<<21
 	largePayload := make(map[string]any)
 	largePayload["data"] = string(make([]byte, 2_200_000))
-	body, _ := json.Marshal(largePayload)
+
+	body, err := json.Marshal(largePayload)
+	if err != nil {
+		t.Fatalf("failed to marshal large payload: %v", err)
+	}
 
 	req, err := http.NewRequestWithContext(context.Background(), http.MethodPost,
 		server.URL+sessionStart, bytes.NewReader(body))

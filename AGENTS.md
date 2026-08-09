@@ -111,6 +111,67 @@ make bd/claim TASK_ID="<id>"  # Claim it
 make bd/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
 ```
 
+### Issue Templates
+When creating issues, include the required sections for the issue type:
+
+**bug** — requires `## Steps to Reproduce` and `## Acceptance Criteria`
+```markdown
+## Steps to Reproduce
+1. Do this
+2. Do that
+
+## Acceptance Criteria
+- Bug is fixed
+```
+
+**task** — requires `## Acceptance Criteria`
+```markdown
+Description of the work
+
+## Acceptance Criteria
+- [ ] Task complete
+```
+
+**feature** — requires `## Acceptance Criteria`
+```markdown
+Description of the feature
+
+## Acceptance Criteria
+- [ ] Feature works as expected
+```
+
+**epic** — requires `## Success Criteria` (or `## Acceptance Criteria`)
+```markdown
+Big project description
+
+## Success Criteria
+- Project ships
+- Users happy
+```
+
+**decision** — requires `## Decision`, `## Rationale`, `## Alternatives Considered`
+```markdown
+## Decision
+What was decided
+
+## Rationale
+Why this option was chosen
+
+## Alternatives Considered
+List of alternatives and why they were rejected
+```
+
+**spike** — requires `## Goal`, `## Findings`
+```markdown
+## Goal
+What question does this spike answer?
+
+## Findings
+What was learned?
+```
+
+**chore** / **message** / **molecule** — no required sections
+
 ## 6. Validation
 
 ### Run tests
