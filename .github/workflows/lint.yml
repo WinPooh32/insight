@@ -34,4 +34,4 @@ jobs:
 
       - run: make install/tools
 
-      - run: make lint
+      - run: make lint/ci

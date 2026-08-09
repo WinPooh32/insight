@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: help lint lint/go lint/typos lint/md lint/arch lint/bd fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
 
 ## Show available targets
 help:
@@ -8,6 +8,9 @@ help:
 
 ## Run all linters
 lint: lint/go lint/typos lint/md lint/arch lint/bd
+
+## Run ci linters
+lint/ci: lint/go lint/typos lint/md lint/arch
 
 lint/go:
 	@echo "Run go linter"
@@ -99,7 +102,7 @@ install/tools:
 	@bash misc/scripts/install-lightpanda.sh
 
 ## Run all tests
-test: test/all test/mutesting
+test: test/all
 
 test/unit:
 	@echo "Run unit tests"
@@ -111,7 +114,11 @@ test/all:
 
 test/mutesting:
 	@echo "Run mutation testing"
-	@go tool -modfile=misc/go-mutesting-go.mod go-mutesting --exec=misc/scripts/mutate-test.sh --test-recursive ./...
+	@misc/scripts/mutest-tested-pkgs.sh
+
+test/mutest-pkg:
+	@echo "Run mutation testing"
+	@go tool -modfile=misc/go-mutesting-go.mod go-mutesting --exec=misc/scripts/mutate-test.sh --config .mutesting.yml $(PACKAGE)
 
 ## Service targets
 gen/insight-storage:

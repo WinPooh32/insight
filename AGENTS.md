@@ -110,3 +110,23 @@ make bd/claim TASK_ID="<id>"  # Claim it
 ```bash
 make bd/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
 ```
+
+## 6. Validation
+
+### Run tests
+```bash
+make test
+```
+
+### Run linter
+```bash
+make lint
+```
+
+### Mutation testing
+Minimal mutation testing score is 0.60
+
+#### Run selected package mutation testing
+```bash
+make test/mutest-pkg PACKAGE="github.com/WinPooh32/insight/cmd/insight/internal/http"
+```
