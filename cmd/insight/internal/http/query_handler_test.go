@@ -13,9 +13,9 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
-	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 
 	_ "modernc.org/sqlite"
 )
@@ -92,13 +92,13 @@ func TestListEvents(t *testing.T) {
 		t.Errorf("expected Content-Type application/json, got %q", resp.Header.Get("Content-Type"))
 	}
 
-	var events []db.Event
-	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
+	var eventList []events.StoredEvent
+	if err := json.NewDecoder(resp.Body).Decode(&eventList); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
 
-	if len(events) != 1 {
-		t.Errorf("expected 1 event, got %d", len(events))
+	if len(eventList) != 1 {
+		t.Errorf("expected 1 event, got %d", len(eventList))
 	}
 }
 
@@ -165,7 +165,7 @@ func TestListEventsLimitBoundary(t *testing.T) {
 				t.Errorf("expected status %d, got %d", tc.expectCode, resp.StatusCode)
 			}
 
-			var events []db.Event
+			var events []events.StoredEvent
 			if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 				t.Fatalf("failed to decode events: %v", err)
 			}
@@ -232,7 +232,7 @@ func TestListEventsEventTypeFilter(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
@@ -288,7 +288,7 @@ func TestListEventsOffset(t *testing.T) {
 		t.Errorf("expected status 200, got %d", resp.StatusCode)
 	}
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
@@ -355,7 +355,7 @@ func TestSessionEvents(t *testing.T) {
 		t.Errorf("expected Content-Type application/json, got %q", resp.Header.Get("Content-Type"))
 	}
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
@@ -430,7 +430,7 @@ func TestListEventsDefaultLimitExact(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
@@ -496,7 +496,7 @@ func TestListEventsLimitMaxBoundary(t *testing.T) {
 				t.Errorf("expected status 200, got %d", resp.StatusCode)
 			}
 
-			var events []db.Event
+			var events []events.StoredEvent
 			if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 				t.Fatalf("failed to decode events: %v", err)
 			}
@@ -545,7 +545,7 @@ func TestListEventsOffsetSkipsEvents(t *testing.T) {
 		t.Fatalf("failed to list events: %v", err)
 	}
 
-	var events1 []db.Event
+	var events1 []events.StoredEvent
 	if err := json.NewDecoder(resp1.Body).Decode(&events1); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
@@ -569,7 +569,7 @@ func TestListEventsOffsetSkipsEvents(t *testing.T) {
 		t.Fatalf("failed to list events: %v", err)
 	}
 
-	var events2 []db.Event
+	var events2 []events.StoredEvent
 	if err := json.NewDecoder(resp2.Body).Decode(&events2); err != nil {
 		t.Fatalf("failed to decode: %v", err)
 	}
@@ -639,7 +639,7 @@ func TestListEventsEventTypeFilterAllMatch(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}
@@ -695,7 +695,7 @@ func TestListEventsDefaultOffset(t *testing.T) {
 	}
 	defer resp.Body.Close()
 
-	var events []db.Event
+	var events []events.StoredEvent
 	if err := json.NewDecoder(resp.Body).Decode(&events); err != nil {
 		t.Fatalf("failed to decode events: %v", err)
 	}

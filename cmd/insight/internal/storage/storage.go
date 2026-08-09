@@ -23,9 +23,9 @@ const storageDirPerm = 0o755
 // Storage provides an interface for storing and querying hook events.
 type Storage interface {
 	Store(ctx context.Context, evt events.Envelope) error
-	Recent(ctx context.Context, limit int) ([]db.Event, error)
-	BySession(ctx context.Context, sessionID string) ([]db.Event, error)
-	ByType(ctx context.Context, eventType string, limit int, offset int) ([]db.Event, error)
+	Recent(ctx context.Context, limit int) ([]events.StoredEvent, error)
+	BySession(ctx context.Context, sessionID string) ([]events.StoredEvent, error)
+	ByType(ctx context.Context, eventType string, limit int, offset int) ([]events.StoredEvent, error)
 	Count(ctx context.Context) (int64, error)
 	Close() error
 }
@@ -116,7 +116,7 @@ func (s *SQLiteStorage) Store(ctx context.Context, evt events.Envelope) error {
 }
 
 // Recent returns the most recent events.
-func (s *SQLiteStorage) Recent(ctx context.Context, limit int) ([]db.Event, error) {
+func (s *SQLiteStorage) Recent(ctx context.Context, limit int) ([]events.StoredEvent, error) {
 	if limit < 0 {
 		return nil, fmt.Errorf("limit must be non-negative, got %d", limit)
 	}
@@ -129,11 +129,11 @@ func (s *SQLiteStorage) Recent(ctx context.Context, limit int) ([]db.Event, erro
 		return nil, fmt.Errorf("recent events: %w", err)
 	}
 
-	return evts, nil
+	return toStoredEvents(evts), nil
 }
 
 // BySession returns all events for a given session.
-func (s *SQLiteStorage) BySession(ctx context.Context, sessionID string) ([]db.Event, error) {
+func (s *SQLiteStorage) BySession(ctx context.Context, sessionID string) ([]events.StoredEvent, error) {
 	evts, err := s.q.EventsBySession(ctx, sql.NullString{
 		Valid:  true,
 		String: sessionID,
@@ -142,11 +142,13 @@ func (s *SQLiteStorage) BySession(ctx context.Context, sessionID string) ([]db.E
 		return nil, fmt.Errorf("events by session: %w", err)
 	}
 
-	return evts, nil
+	return toStoredEvents(evts), nil
 }
 
 // ByType returns events filtered by type with pagination.
-func (s *SQLiteStorage) ByType(ctx context.Context, eventType string, limit int, offset int) ([]db.Event, error) {
+func (s *SQLiteStorage) ByType(
+	ctx context.Context, eventType string, limit int, offset int,
+) ([]events.StoredEvent, error) {
 	if limit < 0 || offset < 0 {
 		return nil, fmt.Errorf("limit and offset must be non-negative, got limit=%d offset=%d", limit, offset)
 	}
@@ -160,7 +162,7 @@ func (s *SQLiteStorage) ByType(ctx context.Context, eventType string, limit int,
 		return nil, fmt.Errorf("events by type: %w", err)
 	}
 
-	return evts, nil
+	return toStoredEvents(evts), nil
 }
 
 // Count returns the total number of stored events.
@@ -180,4 +182,29 @@ func (s *SQLiteStorage) Close() error {
 	}
 
 	return nil
+}
+
+// toStoredEvents converts sqlc-generated db.Event to domain types.
+func toStoredEvents(evts []db.Event) []events.StoredEvent {
+	if len(evts) == 0 {
+		return nil
+	}
+
+	result := make([]events.StoredEvent, len(evts))
+	for i := range evts {
+		var sessionID *string
+		if evts[i].SessionID.Valid {
+			sessionID = &evts[i].SessionID.String
+		}
+
+		result[i] = events.StoredEvent{
+			ID:        evts[i].ID,
+			EventType: evts[i].EventType,
+			Received:  evts[i].Received,
+			Payload:   evts[i].Payload,
+			SessionID: sessionID,
+		}
+	}
+
+	return result
 }

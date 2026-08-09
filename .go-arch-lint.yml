@@ -36,7 +36,6 @@ deps:
       - http
       - storage
       - events
-      - db
   events:
     mayDependOn:
       - events

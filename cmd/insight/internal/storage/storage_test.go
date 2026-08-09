@@ -96,13 +96,9 @@ func TestStoreEmptySessionID(t *testing.T) {
 		t.Fatalf("expected 1 event, got %d", len(eventList))
 	}
 
-	// The session_id should be empty (NULL in DB)
-	if eventList[0].SessionID.String != "" {
-		t.Errorf("expected empty session_id, got %q", eventList[0].SessionID.String)
-	}
-
-	if eventList[0].SessionID.Valid {
-		t.Error("expected session_id to be invalid (NULL)")
+	// The session_id should be nil (NULL in DB)
+	if eventList[0].SessionID != nil {
+		t.Errorf("expected nil session_id, got %q", *eventList[0].SessionID)
 	}
 }
 
@@ -163,8 +159,8 @@ func TestDataIntegrity(t *testing.T) {
 		t.Errorf("expected event type %q, got %q", eventUserPrompt, stored.EventType)
 	}
 
-	if stored.SessionID.String != "integrity-session" {
-		t.Errorf("expected session_id 'integrity-session', got %q", stored.SessionID.String)
+	if stored.SessionID == nil || *stored.SessionID != "integrity-session" {
+		t.Errorf("expected session_id 'integrity-session', got %v", stored.SessionID)
 	}
 
 	// Verify payload was stored

@@ -43,3 +43,14 @@ func (e Envelope) ToJSON() ([]byte, error) {
 
 	return payload, nil
 }
+
+// StoredEvent represents an event as persisted in storage.
+// This type lives in the domain layer so the repository interface
+// does not leak infrastructure types (sqlc models) into presentation layers.
+type StoredEvent struct {
+	ID        string  `json:"id"`
+	EventType string  `json:"event_type"`
+	Received  string  `json:"received"`
+	Payload   string  `json:"payload"`
+	SessionID *string `json:"session_id,omitempty"`
+}

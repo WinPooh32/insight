@@ -6,8 +6,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
-	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 )
 
 const (
@@ -52,7 +52,7 @@ func (h *QueryHandler) ListEvents(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var (
-		eventList []db.Event
+		eventList []events.StoredEvent
 		err       error
 	)
 
