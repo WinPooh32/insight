@@ -61,7 +61,7 @@ mutest_pkg() {
     total=$(grep -oP 'total is \K[0-9]+' "$log" | tail -1) || true
 
     if [[ -n "$score" && -n "$total" ]]; then
-        echo "$score $total" > "$score_file"
+        echo "$pkg $score $total" > "$score_file"
     fi
 }
 
@@ -89,30 +89,47 @@ for pid in "${PIDS[@]}"; do
 done
 
 # Collect results.
-TOTAL_SCORE=0
+MIN_SCORE=""
 TOTAL_MUTANTS=0
 PACKAGE_COUNT=0
+declare -a PKG_SCORES=()
 
 for score_file in "$RESULT_DIR"/*.score; do
     [[ -f "$score_file" ]] || continue
-    read -r score total < "$score_file"
-    TOTAL_SCORE=$(echo "$TOTAL_SCORE + $score * $total" | bc)
+    read -r pkg score total < "$score_file"
     TOTAL_MUTANTS=$((TOTAL_MUTANTS + total))
     PACKAGE_COUNT=$((PACKAGE_COUNT + 1))
+    PKG_SCORES+=("  $pkg: $score ($total mutants)")
+
+    # Only consider packages with actual mutants for minimum score.
+    if [[ "$total" -gt 0 ]]; then
+        if [[ -z "$MIN_SCORE" ]]; then
+            MIN_SCORE="$score"
+        else
+            BELOW=$(echo "$score < $MIN_SCORE" | bc)
+            if [[ "$BELOW" -eq 1 ]]; then
+                MIN_SCORE="$score"
+            fi
+        fi
+    fi
 done
 
-if [[ $TOTAL_MUTANTS -gt 0 ]]; then
-    AVG=$(echo "scale=4; $TOTAL_SCORE / $TOTAL_MUTANTS" | bc)
+if [[ $TOTAL_MUTANTS -gt 0 && -n "$MIN_SCORE" ]]; then
     echo ""
     echo "========================================"
-    echo "Average mutation score: $AVG ($PACKAGE_COUNT packages, $TOTAL_MUTANTS total mutants)"
+    echo "Package mutation scores:"
+    for line in "${PKG_SCORES[@]}"; do
+        echo "$line"
+    done
+    echo "----------------------------------------"
+    echo "Min mutation score: $MIN_SCORE ($PACKAGE_COUNT packages, $TOTAL_MUTANTS total mutants)"
     echo "========================================"
 
     # Check against threshold if set.
     if [[ -n "${MUTEST_THRESHOLD:-}" ]]; then
-        BELOW=$(echo "$AVG < $MUTEST_THRESHOLD" | bc)
+        BELOW=$(echo "$MIN_SCORE < $MUTEST_THRESHOLD" | bc)
         if [[ "$BELOW" -eq 1 ]]; then
-            echo "FAIL: mutation score $AVG is below threshold $MUTEST_THRESHOLD"
+            echo "FAIL: mutation score $MIN_SCORE is below threshold $MUTEST_THRESHOLD"
             exit 1
         fi
     fi
