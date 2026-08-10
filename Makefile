@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/coverage gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
 
 ## Show available targets
 help:
@@ -120,10 +120,16 @@ test/all:
 test/mutesting:
 	@echo "Run mutation testing"
 	@misc/scripts/mutest-tested-pkgs.sh
+	$(MAKE) test/mutest-clear
 
 test/mutest-pkg:
 	@echo "Run mutation testing"
 	@go tool -modfile=misc/go-mutesting-go.mod go-mutesting --exec=misc/scripts/mutate-test.sh --config .mutesting.yml $(PACKAGE)
+	$(MAKE) test/mutest-clear
+
+test/mutest-clear:
+	@echo "Clean up..."
+	rm -rf /tmp/Test* /tmp/go-build* /tmp/go-mutesting* /tmp/net_C*
 
 ## Coverage targets
 test/coverage:
