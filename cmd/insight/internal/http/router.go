@@ -9,10 +9,10 @@ import (
 )
 
 // Router returns an http.Handler with all routes registered.
-func Router(storage storage.Storage, logger *slog.Logger) http.Handler {
+func Router(storage storage.Storage, filter events.AllowList, logger *slog.Logger) http.Handler {
 	mux := http.NewServeMux()
 
-	eventHandler := NewEventHandler(storage, logger)
+	eventHandler := NewEventHandler(storage, filter, logger)
 	queryHandler := NewQueryHandler(storage, logger)
 
 	// Health check

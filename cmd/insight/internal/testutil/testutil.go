@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
 
@@ -65,21 +66,33 @@ func NewTestStorageWithLog(tb testing.TB, logBuf *bytes.Buffer) *storage.SQLiteS
 }
 
 // NewTestRouter creates an HTTP router backed by a temp storage.
+// No event filter is applied (all events allowed).
 func NewTestRouter(tb testing.TB) http.Handler {
 	tb.Helper()
 
 	storageInst := NewTestStorage(tb)
 
-	return insighthttp.Router(storageInst, slog.New(slog.DiscardHandler))
+	return insighthttp.Router(storageInst, nil, slog.New(slog.DiscardHandler))
 }
 
 // NewTestRouterWithLog creates an HTTP router and captures logs.
+// No event filter is applied (all events allowed).
 func NewTestRouterWithLog(tb testing.TB, logBuf *bytes.Buffer) http.Handler {
 	tb.Helper()
 
 	storageInst := NewTestStorageWithLog(tb, logBuf)
 
-	return insighthttp.Router(storageInst, slog.New(slog.NewTextHandler(logBuf, nil)))
+	return insighthttp.Router(storageInst, nil, slog.New(slog.NewTextHandler(logBuf, nil)))
+}
+
+// NewTestRouterWithFilter creates an HTTP router with a custom event filter.
+func NewTestRouterWithFilter(tb testing.TB, filter []string) http.Handler {
+	tb.Helper()
+
+	storageInst := NewTestStorage(tb)
+	allowList := events.NewAllowList(filter)
+
+	return insighthttp.Router(storageInst, allowList, slog.New(slog.DiscardHandler))
 }
 
 // NewTestServer creates an httptest.Server from a router and registers cleanup.

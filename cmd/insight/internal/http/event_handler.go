@@ -14,15 +14,17 @@ const maxPayloadBytes = 1 << 20 // 1 MB
 
 // EventHandler handles POST requests for hook events.
 type EventHandler struct {
-	storage storage.Storage
-	log     *slog.Logger
+	storage     storage.Storage
+	eventFilter events.AllowList
+	log         *slog.Logger
 }
 
-// NewEventHandler creates a new EventHandler with the given storage and logger.
-func NewEventHandler(storage storage.Storage, logger *slog.Logger) *EventHandler {
+// NewEventHandler creates a new EventHandler with the given storage, filter, and logger.
+func NewEventHandler(storage storage.Storage, filter events.AllowList, logger *slog.Logger) *EventHandler {
 	return &EventHandler{
-		storage: storage,
-		log:     logger,
+		storage:     storage,
+		eventFilter: filter,
+		log:         logger,
 	}
 }
 
@@ -40,6 +42,17 @@ func (h *EventHandler) HandleEvent(w http.ResponseWriter, r *http.Request, event
 	}
 
 	envelope := events.NewEnvelope(eventType, payload)
+
+	if !h.eventFilter.Allows(eventType) {
+		h.log.InfoContext(r.Context(), "event filtered",
+			"event_type", eventType,
+		)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, `{"status":"ignored"}`)
+
+		return
+	}
 
 	if err := h.storage.Store(r.Context(), envelope); err != nil {
 		h.log.ErrorContext(r.Context(), "failed to store event",

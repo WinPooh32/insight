@@ -14,6 +14,7 @@ import (
 	"github.com/pressly/goose/v3/database"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/config"
+	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
 	migrations "github.com/WinPooh32/insight/cmd/insight/internal/storage/migrations"
@@ -99,7 +100,7 @@ func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage
 
 	server := &http.Server{
 		Addr:                         cfg.Addr(),
-		Handler:                      insighthttp.Router(stor, cfg.Logger),
+		Handler:                      insighthttp.Router(stor, events.NewAllowList(cfg.EventFilter), cfg.Logger),
 		ReadHeaderTimeout:            readTimeout,
 		ReadTimeout:                  readTimeout,
 		WriteTimeout:                 writeTimeout,

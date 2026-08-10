@@ -284,3 +284,75 @@ func TestHandleEventLogsSuccess(t *testing.T) {
 		t.Errorf("expected 'hook event received' in logs, got: %s", logBuf.String())
 	}
 }
+
+func TestHandleEventFilter(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name         string
+		filter       []string
+		endpoint     string
+		expectStatus int
+		expectBody   string
+	}{
+		{
+			name:         "allowed event returns 202",
+			filter:       []string{"SessionStart"},
+			endpoint:     sessionStart,
+			expectStatus: http.StatusAccepted,
+			expectBody:   `"status":"received"`,
+		},
+		{
+			name:         "filtered event returns 200 ignored",
+			filter:       []string{"SessionStart"},
+			endpoint:     userPrompt,
+			expectStatus: http.StatusOK,
+			expectBody:   `"status":"ignored"`,
+		},
+		{
+			name:         "empty filter allows all",
+			filter:       nil,
+			endpoint:     userPrompt,
+			expectStatus: http.StatusAccepted,
+			expectBody:   `"status":"received"`,
+		},
+		{
+			name:         "multiple allowed events",
+			filter:       []string{"SessionStart", "UserPromptSubmit"},
+			endpoint:     userPrompt,
+			expectStatus: http.StatusAccepted,
+			expectBody:   `"status":"received"`,
+		},
+		{
+			name:         "unlisted event filtered",
+			filter:       []string{"Stop"},
+			endpoint:     messageDisp,
+			expectStatus: http.StatusOK,
+			expectBody:   `"status":"ignored"`,
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			router := testutil.NewTestRouterWithFilter(t, tc.filter)
+			server := testutil.NewTestServer(t, router)
+
+			payload := map[string]any{
+				testutil.TestSessionID: "test-session",
+				"data":                 "test",
+			}
+
+			resp := testutil.PostJSON(t, server, tc.endpoint, payload)
+			defer resp.Body.Close()
+
+			testutil.AssertStatus(t, resp, tc.expectStatus)
+
+			body := testutil.ReadBody(resp)
+			if !strings.Contains(string(body), tc.expectBody) {
+				t.Errorf("expected body to contain %q, got %q", tc.expectBody, string(body))
+			}
+		})
+	}
+}
