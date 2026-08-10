@@ -48,6 +48,9 @@ func NewSQLiteStorage(ctx context.Context, dbPath string, logger *slog.Logger) (
 		return nil, fmt.Errorf("open sqlite: %w", err)
 	}
 
+	// SQLite needs a single writer connection to avoid SQLITE_BUSY.
+	sdb.SetMaxOpenConns(1)
+
 	// Enable WAL mode for better concurrent read performance.
 	if _, err := sdb.ExecContext(ctx, "PRAGMA journal_mode=WAL"); err != nil {
 		sdb.Close()
