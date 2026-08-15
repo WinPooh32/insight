@@ -75,11 +75,15 @@ issue/ready:
 
 # Claim issue
 issue/claim:
-	@misc/bin/bd update $(TASK_ID) --claim
+	@misc/bin/bd update $(ISSUE_ID) --claim
+
+# Set issue status 
+issue/set-status:
+	@misc/bin/bd update $(ISSUE_ID) --status "$(STATUS)"
 
 # Review issue details
 issue/show:
-	@misc/bin/bd show $(TASK_ID)
+	@misc/bin/bd show $(ISSUE_ID)
 
 # Create issues
 issue/create:

@@ -102,13 +102,18 @@ make issue/create-child TITLE="<issue name>" DESCRIPTION="<issue description>"` 
 #### Starting work
 ```bash
 make issue/ready                 # Find available work
-make issue/show TASK_ID="<id>"   # Review issue details
-make issue/claim TASK_ID="<id>"  # Claim it
+make issue/show ISSUE_ID="<id>"   # Review issue details
+make issue/claim ISSUE_ID="<id>"  # Claim it
 ```
 
 #### Completing work
 ```bash
 make issue/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
+```
+
+#### Set blocked by another issue
+```bash
+make issue/set-status ISSUE_ID="<id>" STATUS="blocked"
 ```
 
 ### Issue Templates

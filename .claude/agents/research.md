@@ -1,6 +1,7 @@
 ---
 name: research
 description: Use for deep codebase researching, answering "how to" questings
+model: opus
 color: red
 background: false
 tools: 
