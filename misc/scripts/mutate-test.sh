@@ -24,6 +24,13 @@ trap sig_handler SIGHUP SIGINT SIGTERM
 
 export GOMUTESTING_DIFF=$(diff -u $MUTATE_ORIGINAL $MUTATE_CHANGED)
 
+SKIP_PATTERN="^-.*(\.log\.\w+Context|fmt\.F?print|fmt\.Errorf|return err|return nil, err|return.*fmt\.Errorf)"
+
+if echo "$GOMUTESTING_DIFF" | grep -q -i -E "$SKIP_PATTERN"
+then # skip
+	exit 2
+fi
+
 mv $MUTATE_ORIGINAL $MUTATE_ORIGINAL.tmp
 cp $MUTATE_CHANGED $MUTATE_ORIGINAL
 
@@ -66,8 +73,13 @@ case $GOMUTESTING_RESULT in
 
 	exit 2
 	;;
+3) # tests failed ? -> PASS
+	echo "$GOMUTESTING_DIFF"
+
+	exit 0
+	;;
 *) # Unknown exit code -> SKIP
-	echo "Unknown exit code"
+	echo "Unknown exit code $GOMUTESTING_RESULT"
 	echo "$GOMUTESTING_DIFF"
 
 	exit $GOMUTESTING_RESULT
