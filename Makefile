@@ -79,7 +79,7 @@ issue/claim:
 
 # Set issue status 
 issue/set-status:
-	@misc/bin/bd update $(ISSUE_ID) --status "$(STATUS)"
+	@misc/bin/bd update $(ISSUE_ID) --status "$(STATUS)" --append-notes "$(REASON)"
 
 # Review issue details
 issue/show:
@@ -88,6 +88,14 @@ issue/show:
 # Create issues
 issue/create:
 	@misc/bin/bd create "$(TITLE)" --description "$(DESCRIPTION)" --type=$(TYPE)
+
+# Link issues
+issue/link:
+	@misc/bin/bd dep add $(ISSUE_ID) $(DEPENS_ON_ID)
+
+# Unlink issues
+issue/unlink:
+	@misc/bin/bd dep remove $(ISSUE_ID) $(DEPENS_ON_ID)
 
 # Close issues
 issue/close:

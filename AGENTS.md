@@ -113,7 +113,7 @@ make issue/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close 
 
 #### Set blocked by another issue
 ```bash
-make issue/set-status ISSUE_ID="<id>" STATUS="blocked"
+make issue/set-status ISSUE_ID="<id>" STATUS="blocked" REASON="<reason why its blocked by another issue>"
 ```
 
 ### Issue Templates
