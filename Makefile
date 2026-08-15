@@ -83,15 +83,15 @@ bd/show:
 
 # Create issues
 bd/create:
-	@misc/bin/bd --title $(TITLE) --description $(DESCRIPTION) --type=$(TYPE)
+	@misc/bin/bd create "$(TITLE)" --description "$(DESCRIPTION)" --type=$(TYPE)
 
 # Close issues
 bd/close:
-	@misc/bin/bd close $(ISSUES) --reason $(REASON)
+	@misc/bin/bd close $(ISSUES) --reason "$(REASON)"
 
 # Search issues by keyword
 bd/search:
-	@misc/bin/bd search ${QUERY}
+	@misc/bin/bd search "${QUERY}"
 
 install/tools:
 	@echo "Downloading misc tool dependencies..."
