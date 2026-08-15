@@ -77,38 +77,38 @@ This project uses bd (beads) for issue tracking.
 - Do not use markdown TODO lists for task tracking.
 
 ## Core Rules
-- **Default**: Use beads for ALL task tracking (`make bd/create`, `make bd/ready`, `make bd/close`)
+- **Default**: Use beads for ALL task tracking (`make issue/create`, `make issue/ready`, `make issue/close`)
 - **Prohibited**: Do NOT use TodoWrite, TaskCreate, or markdown files for task tracking
 - **Workflow**: Create beads issue BEFORE writing code, claim it when starting
 - Persistence you don't need beats lost context
 - Git authority: no git operations in this context
 - Git workflow: stealth mode (no git ops)
-- Session management: check `make bd/ready` for available work
+- Session management: check `make issue/ready` for available work
 
 ### Creating & Updating
 
 #### New issue
 ```bash
-make bd/create TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>"
+make issue/create TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>"
 ```
 
 #### Hierarchical child (task under epic, subtask under task; inherits parent labels)
 ```bash
-make bd/create-child TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>" PARENT="<id>"
+make issue/create-child TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>" PARENT="<id>"
 ```
 
 ### Common Workflows
 
 #### Starting work
 ```bash
-make bd/ready                 # Find available work
-make bd/show TASK_ID="<id>"   # Review issue details
-make bd/claim TASK_ID="<id>"  # Claim it
+make issue/ready                 # Find available work
+make issue/show TASK_ID="<id>"   # Review issue details
+make issue/claim TASK_ID="<id>"  # Claim it
 ```
 
 #### Completing work
 ```bash
-make bd/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
+make issue/close ISSUES="<id_1> <id_2> ..." REASON="reason to close"    # Close all completed issues at once
 ```
 
 ### Issue Templates

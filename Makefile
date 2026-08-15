@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight bd/prime bd/ready bd/claim bd/create bd/show bd/create bd/close bd/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight issue/prime issue/ready issue/claim issue/create issue/show issue/close issue/search
 
 ## Show available targets
 help:
@@ -66,31 +66,31 @@ run/mcp-lightpanda:
 	@misc/bin/lightpanda mcp $(LIGHTPANDA_ARGS)
 
 ## Run beads
-bd/prime:
+issue/prime:
 	@misc/bin/bd prime
 
 # Show issues ready to work on
-bd/ready:
+issue/ready:
 	@misc/bin/bd ready
 
 # Claim issue
-bd/claim:
+issue/claim:
 	@misc/bin/bd update $(TASK_ID) --claim
 
 # Review issue details
-bd/show:
+issue/show:
 	@misc/bin/bd show $(TASK_ID)
 
 # Create issues
-bd/create:
+issue/create:
 	@misc/bin/bd create "$(TITLE)" --description "$(DESCRIPTION)" --type=$(TYPE)
 
 # Close issues
-bd/close:
+issue/close:
 	@misc/bin/bd close $(ISSUES) --reason "$(REASON)"
 
 # Search issues by keyword
-bd/search:
+issue/search:
 	@misc/bin/bd search "${QUERY}"
 
 install/tools:
