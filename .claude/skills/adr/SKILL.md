@@ -8,23 +8,14 @@ Follow these steps to add a new Architecture Decision Record.
 
 ## 1. Generate the Filename
 
-Use UTC timestamp + short descriptive slug:
-
-```bash
-date -u '+%Y-%m-%d'
-```
-
-Append a kebab-case slug that summarizes the decision:
+Use a 4-digit zero-padded sequence number + short descriptive slug.
+Take the highest existing number, increment it, zero-pad to 4 digits
+(start at `0001`). Append a kebab-case slug that summarizes the
+decision:
 
 ```text
-docs/adr/2026-08-04-use-postgres-for-primary-db.md
-```
-
-**Multiple ADRs on the same day** are fine — descriptive slugs disambiguate:
-
-```text
-docs/adr/2026-08-04-use-postgres-for-primary-db.md
-docs/adr/2026-08-04-adopt-gofumpt-linter.md
+docs/adr/0001-use-postgres-for-primary-db.md
+docs/adr/0002-adopt-gofumpt-linter.md
 ```
 
 ## 2. Write the ADR
@@ -65,5 +56,5 @@ Include negative consequences — they're valuable, not failures.
 ## 4. Verify
 
 - File lives in `docs/adr/` and follows the naming convention.
-- Filename is lexicographically sortable (timestamp prefix ensures this).
+- Filename is lexicographically sortable (zero-padded number ensures this).
 - The ADR is self-contained — a reader doesn't need to open other files to understand it.
