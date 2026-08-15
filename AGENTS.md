@@ -89,12 +89,14 @@ This project uses bd (beads) for issue tracking.
 
 #### New issue
 ```bash
-make issue/create TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>"
+make issue/create TITLE="<issue name>" DESCRIPTION="<issue description>" TYPE="<task|bug|feature>"
 ```
+
+Newlines in DESCRIPTION: use literal \n (the recipe converts it); keep the value on one line.
 
 #### Hierarchical child (task under epic, subtask under task; inherits parent labels)
 ```bash
-make issue/create-child TITLE="<issue name>" DESCRIPTION="<issue description>"` TYPE="<task|bug|feature>" PARENT="<id>"
+make issue/create-child TITLE="<issue name>" DESCRIPTION="<issue description>" TYPE="<task|bug|feature>" PARENT="<id>"
 ```
 
 ### Common Workflows

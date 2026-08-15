@@ -1,6 +1,6 @@
 -include .env
 
-.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight issue/prime issue/ready issue/claim issue/create issue/show issue/close issue/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight issue/prime issue/ready issue/claim issue/create issue/create-child issue/show issue/close issue/search
 
 ## Show available targets
 help:
@@ -87,7 +87,11 @@ issue/show:
 
 # Create issues
 issue/create:
-	@misc/bin/bd create "$(TITLE)" --description "$(DESCRIPTION)" --type=$(TYPE)
+	@misc/bin/bd create "$(TITLE)" --description "$$(printf '%b' "$(DESCRIPTION)")" --type=$(TYPE)
+
+# Create child issue under a parent
+issue/create-child:
+	@misc/bin/bd create "$(TITLE)" --description "$$(printf '%b' "$(DESCRIPTION)")" --type=$(TYPE) --parent $(PARENT)
 
 # Link issues
 issue/link:
