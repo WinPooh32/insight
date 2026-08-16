@@ -1,6 +1,6 @@
 ---
 # ref: https://github.com/gastownhall/beads/blob/main/plugins/beads/agents/task-agent.md
-description: Use for find and complete ready issues
+description: Use for completing issues
 model: opus
 color: pink
 background: false
