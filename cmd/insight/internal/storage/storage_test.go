@@ -55,6 +55,25 @@ func (c *captureLog) WithAttrs([]slog.Attr) slog.Handler { return c }
 
 func (c *captureLog) WithGroup(string) slog.Handler { return c }
 
+func TestNewSQLiteStorageBadParentDir(t *testing.T) {
+	t.Parallel()
+
+	tmpDir := t.TempDir()
+
+	blocker := filepath.Join(tmpDir, "blocker")
+	if err := os.WriteFile(blocker, []byte("x"), 0o600); err != nil {
+		t.Fatalf("failed to create blocker file: %v", err)
+	}
+
+	dbPath := filepath.Join(blocker, "test.db")
+
+	logger := slog.New(slog.DiscardHandler)
+
+	if _, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger); err == nil {
+		t.Fatal("expected error when db parent path is a file")
+	}
+}
+
 func TestNewSQLiteStorageLogsInit(t *testing.T) {
 	t.Parallel()
 
@@ -92,5 +111,15 @@ func TestStorageSingleConnectionPool(t *testing.T) {
 
 	if got := storageInst.DBForTest().Stats().MaxOpenConnections; got != 1 {
 		t.Errorf("MaxOpenConnections = %d, want 1", got)
+	}
+}
+
+func TestQueries(t *testing.T) {
+	t.Parallel()
+
+	storageInst := testutil.NewTestStorage(t)
+
+	if storageInst.Queries() == nil {
+		t.Fatal("expected non-nil queries")
 	}
 }
