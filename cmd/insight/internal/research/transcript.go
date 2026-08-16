@@ -38,11 +38,21 @@ func NewTranscript(path string, session SessionQueries) *Transcript {
 	return &Transcript{path: path, session: session}
 }
 
-// Delta returns the assistant text blocks appended to the transcript
-// since the previous Delta call for sessionID and persists the new
-// offset. Only top-level entries with type "assistant" and
-// isSidechain false contribute; within them only "text" content
-// blocks are concatenated (thinking and tool blocks excluded). A
+// proseCapTokens is the approximate token budget kept from each end
+// of an over-long text or thinking block.
+// ponytail: tokens approximated as 4 chars; use a real tokenizer if
+// the embedding budget ever needs exactness.
+const proseCapTokens = 512
+
+// proseCapChars is the per-side char budget behind proseCapTokens.
+const proseCapChars = proseCapTokens * 4
+
+// Delta returns the assistant prose (text and thinking) blocks
+// appended to the transcript since the previous Delta call for
+// sessionID and persists the new offset. Only top-level entries with
+// type "assistant" and isSidechain false contribute; within them
+// "text" and "thinking" content blocks are concatenated in block
+// order, each capped by capProse (tool and other blocks excluded). A
 // trailing partial line (the file is still being written) is left
 // unconsumed. If the file shrank (compaction) the offset resets to 0.
 // The returned text may be "".
@@ -66,8 +76,8 @@ func (t *Transcript) Delta(ctx context.Context, sessionID string) (string, error
 	var b strings.Builder
 
 	for line := range bytes.Lines(data) {
-		if text := assistantText(line); text != "" {
-			b.WriteString(text)
+		if prose := assistantProse(line); prose != "" {
+			b.WriteString(prose)
 		}
 	}
 
@@ -139,18 +149,40 @@ func (t *Transcript) persist(ctx context.Context, state db.SessionState, offset 
 	return nil
 }
 
-// assistantText returns the concatenated "text" blocks of a main
-// (non-sidechain) assistant entry line. It returns "" for every other
-// line type, sidechain lines, unparsable lines, and entries without
-// text blocks.
-func assistantText(line []byte) string {
+// capProse returns s unchanged when it fits the head+tail budget,
+// otherwise the first and last proseCapChars of s joined by an
+// elision marker, each side cut back to a word boundary.
+func capProse(s string) string {
+	if len(s) <= 2*proseCapChars {
+		return s
+	}
+
+	head := s[:proseCapChars]
+	if i := strings.LastIndexByte(head, ' '); i > 0 {
+		head = head[:i]
+	}
+
+	tail := s[len(s)-proseCapChars:]
+	if i := strings.IndexByte(tail, ' '); i >= 0 {
+		tail = tail[i+1:]
+	}
+
+	return head + "\n…\n" + tail
+}
+
+// assistantProse returns the concatenated "text" and "thinking"
+// blocks of a main (non-sidechain) assistant entry line, each capped
+// by capProse. It returns "" for every other line type, sidechain
+// lines, unparsable lines, and entries without such blocks.
+func assistantProse(line []byte) string {
 	var entry struct {
 		Type        string `json:"type"`
 		IsSidechain bool   `json:"isSidechain"`
 		Message     struct {
 			Content []struct {
-				Type string `json:"type"`
-				Text string `json:"text"`
+				Type     string `json:"type"`
+				Text     string `json:"text"`
+				Thinking string `json:"thinking"`
 			} `json:"content"`
 		} `json:"message"`
 	}
@@ -165,8 +197,11 @@ func assistantText(line []byte) string {
 	var b strings.Builder
 
 	for _, block := range entry.Message.Content {
-		if block.Type == "text" {
-			b.WriteString(block.Text)
+		switch block.Type {
+		case "text":
+			b.WriteString(capProse(block.Text))
+		case "thinking":
+			b.WriteString(capProse(block.Thinking))
 		}
 	}
 

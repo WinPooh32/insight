@@ -16,12 +16,15 @@ hook returns an empty body and the prompt proceeds.
 
 ## Injection
 
-| Hook               | Query segments (each embedded separately)                                                 |
-| ------------------ | ----------------------------------------------------------------------------------------- |
-| `UserPromptSubmit` | {user prompt}                                                                             |
-| `PreToolUse`       | {user prompt} ∪ {assistant text blocks since the last tool call} ∪ {current `tool_input`} |
+| Hook               | Query segments (each embedded separately)                                           |
+| ------------------ | ----------------------------------------------------------------------------------- |
+| `UserPromptSubmit` | {user prompt}                                                                       |
+| `PreToolUse`       | {user prompt} ∪ {assistant prose since the last tool call} ∪ {current `tool_input`} |
 
-- Assistant **text** blocks only — thinking blocks are excluded.
+- Assistant **text** and **thinking** blocks are included; over-long blocks
+  are capped to their first and last ~512 tokens (approximated as 4 chars/token)
+  with the middle elided. `redacted_thinking` blocks are skipped (no readable
+  content).
 - The transcript is delta-parsed via a per-session byte offset on
   `transcript_path`. If the file shrinks (compaction) the offset resets to 0;
   the embedding hash-cache absorbs the re-read. Main transcript only; subagent

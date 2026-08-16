@@ -70,9 +70,9 @@ func TestTranscriptDelta(t *testing.T) {
 	storageInst := testutil.NewTestStorage(t)
 	tr := research.NewTranscript(path, storageInst.Queries())
 
-	// First read: all assistant text, thinking excluded.
-	if got := delta(t, tr, "s1"); got != "hello" {
-		t.Errorf("first delta = %q, want %q", got, "hello")
+	// First read: all assistant prose (thinking + text), block order.
+	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
+		t.Errorf("first delta = %q, want %q", got, "secret-thoughthello")
 	}
 
 	// Second read, unchanged file: nothing new.
@@ -83,8 +83,8 @@ func TestTranscriptDelta(t *testing.T) {
 	// Append: user line, thinking-only entry, mixed entry, sidechain.
 	appendTranscript(t, path, fixtureUser+"\n"+fixtureThinking+"\n"+fixtureMixed+"\n"+fixtureSidechain+"\n")
 
-	if got := delta(t, tr, "s1"); got != "world" {
-		t.Errorf("third delta = %q, want %q", got, "world")
+	if got := delta(t, tr, "s1"); got != "inner-monoworldagain" {
+		t.Errorf("third delta = %q, want %q", got, "inner-monoworldagain")
 	}
 }
 
@@ -96,8 +96,8 @@ func TestTranscriptShrinkResetsOffset(t *testing.T) {
 	storageInst := testutil.NewTestStorage(t)
 	tr := research.NewTranscript(path, storageInst.Queries())
 
-	if got := delta(t, tr, "s1"); got != "helloworld" {
-		t.Fatalf("first delta = %q, want %q", got, "helloworld")
+	if got := delta(t, tr, "s1"); got != "secret-thoughthelloinner-monoworldagain" {
+		t.Fatalf("first delta = %q, want %q", got, "secret-thoughthelloinner-monoworldagain")
 	}
 
 	// Compaction: the file is now shorter than the stored offset.
@@ -105,8 +105,8 @@ func TestTranscriptShrinkResetsOffset(t *testing.T) {
 		t.Fatalf("rewrite transcript: %v", err)
 	}
 
-	if got := delta(t, tr, "s1"); got != "hello" {
-		t.Errorf("delta after shrink = %q, want %q", got, "hello")
+	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
+		t.Errorf("delta after shrink = %q, want %q", got, "secret-thoughthello")
 	}
 }
 
@@ -118,8 +118,8 @@ func TestTranscriptPartialTrailingLine(t *testing.T) {
 	storageInst := testutil.NewTestStorage(t)
 	tr := research.NewTranscript(path, storageInst.Queries())
 
-	if got := delta(t, tr, "s1"); got != "hello" {
-		t.Fatalf("first delta = %q, want %q", got, "hello")
+	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
+		t.Fatalf("first delta = %q, want %q", got, "secret-thoughthello")
 	}
 
 	// A line still being written: no trailing newline.
@@ -143,8 +143,8 @@ func TestTranscriptPartialTrailingLine(t *testing.T) {
 
 	appendTranscript(t, path, "\n")
 
-	if got := delta(t, tr, "s1"); got != "world" {
-		t.Errorf("delta after line completed = %q, want %q", got, "world")
+	if got := delta(t, tr, "s1"); got != "worldagain" {
+		t.Errorf("delta after line completed = %q, want %q", got, "worldagain")
 	}
 }
 
@@ -170,8 +170,8 @@ func TestTranscriptPreservesInjectedEntries(t *testing.T) {
 
 	tr := research.NewTranscript(path, queries)
 
-	if got := delta(t, tr, "s1"); got != "hello" {
-		t.Fatalf("delta = %q, want %q", got, "hello")
+	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
+		t.Fatalf("delta = %q, want %q", got, "secret-thoughthello")
 	}
 
 	row, err := queries.GetSessionState(ctx, "s1")
@@ -196,5 +196,79 @@ func TestTranscriptMissingFile(t *testing.T) {
 
 	if _, err := tr.Delta(context.Background(), "s1"); err == nil {
 		t.Error("expected error for missing transcript file")
+	}
+}
+
+func TestTranscriptDeltaCapsLongBlocks(t *testing.T) {
+	t.Parallel()
+
+	// 9000 chars, well over the 2*2048 char budget.
+	long := strings.Repeat("abcdefgh ", 1000)
+
+	path := writeTranscript(t,
+		`{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[`+
+			`{"type":"thinking","thinking":"`+long+`"}]}}`,
+	)
+
+	storageInst := testutil.NewTestStorage(t)
+	tr := research.NewTranscript(path, storageInst.Queries())
+
+	check := func(got, block string) {
+		t.Helper()
+
+		head, tail, ok := strings.Cut(got, "\n…\n")
+		if !ok {
+			t.Fatalf("capped block %q missing elision marker", got)
+		}
+
+		if !strings.HasPrefix(block, head) {
+			t.Errorf("head %q is not a prefix of the block", head)
+		}
+
+		if !strings.HasSuffix(block, tail) {
+			t.Errorf("tail %q is not a suffix of the block", tail)
+		}
+
+		// 512 tokens * 4 chars per side.
+		if len(head) > 2048 || len(tail) > 2048 {
+			t.Errorf("head %d / tail %d chars exceed the 2048 budget", len(head), len(tail))
+		}
+
+		if len(got) >= len(block) {
+			t.Errorf("capped block %d chars not shorter than the %d char original", len(got), len(block))
+		}
+
+		if block[len(head)] != ' ' {
+			t.Errorf("head does not end at a word boundary: %q", head[len(head)-10:])
+		}
+
+		if block[len(block)-len(tail)-1] != ' ' {
+			t.Errorf("tail does not start at a word boundary: %q", tail[:10])
+		}
+	}
+
+	check(delta(t, tr, "s1"), long)
+
+	// Long text blocks are capped the same way.
+	appendTranscript(t, path,
+		`{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[`+
+			`{"type":"text","text":"`+long+`"}]}}`+"\n")
+
+	check(delta(t, tr, "s1"), long)
+}
+
+func TestTranscriptDeltaSkipsRedactedThinking(t *testing.T) {
+	t.Parallel()
+
+	path := writeTranscript(t,
+		`{"type":"assistant","isSidechain":false,"message":{"role":"assistant","content":[`+
+			`{"type":"redacted_thinking","data":"c2VjcmV0"},{"type":"text","text":"visible"}]}}`,
+	)
+
+	storageInst := testutil.NewTestStorage(t)
+	tr := research.NewTranscript(path, storageInst.Queries())
+
+	if got := delta(t, tr, "s1"); got != "visible" {
+		t.Errorf("delta = %q, want %q", got, "visible")
 	}
 }
