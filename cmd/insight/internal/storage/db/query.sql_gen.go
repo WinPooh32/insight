@@ -30,95 +30,6 @@ func (q *Queries) DeleteResearchEntry(ctx context.Context, id int64) error {
 	return err
 }
 
-const eventCount = `-- name: EventCount :one
-SELECT count(*) FROM events
-`
-
-func (q *Queries) EventCount(ctx context.Context) (int64, error) {
-	row := q.db.QueryRowContext(ctx, eventCount)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
-const eventsBySession = `-- name: EventsBySession :many
-SELECT id, event_type, received, payload, session_id FROM events
-WHERE session_id = ?
-ORDER BY received
-`
-
-func (q *Queries) EventsBySession(ctx context.Context, sessionID sql.NullString) ([]Event, error) {
-	rows, err := q.db.QueryContext(ctx, eventsBySession, sessionID)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Event{}
-	for rows.Next() {
-		var i Event
-		if err := rows.Scan(
-			&i.ID,
-			&i.EventType,
-			&i.Received,
-			&i.Payload,
-			&i.SessionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
-const eventsByType = `-- name: EventsByType :many
-SELECT id, event_type, received, payload, session_id FROM events
-WHERE event_type = ?
-ORDER BY received DESC
-LIMIT ?
-OFFSET ?
-`
-
-type EventsByTypeParams struct {
-	EventType string `json:"event_type"`
-	Limit     int64  `json:"limit"`
-	Offset    int64  `json:"offset"`
-}
-
-func (q *Queries) EventsByType(ctx context.Context, arg EventsByTypeParams) ([]Event, error) {
-	rows, err := q.db.QueryContext(ctx, eventsByType, arg.EventType, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Event{}
-	for rows.Next() {
-		var i Event
-		if err := rows.Scan(
-			&i.ID,
-			&i.EventType,
-			&i.Received,
-			&i.Payload,
-			&i.SessionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const getEmbedCache = `-- name: GetEmbedCache :one
 SELECT sha256, vector, dim, model FROM embed_cache
 WHERE sha256 = ? LIMIT 1
@@ -132,24 +43,6 @@ func (q *Queries) GetEmbedCache(ctx context.Context, sha256 string) (EmbedCache,
 		&i.Vector,
 		&i.Dim,
 		&i.Model,
-	)
-	return i, err
-}
-
-const getEvent = `-- name: GetEvent :one
-SELECT id, event_type, received, payload, session_id FROM events
-WHERE id = ? LIMIT 1
-`
-
-func (q *Queries) GetEvent(ctx context.Context, id string) (Event, error) {
-	row := q.db.QueryRowContext(ctx, getEvent, id)
-	var i Event
-	err := row.Scan(
-		&i.ID,
-		&i.EventType,
-		&i.Received,
-		&i.Payload,
-		&i.SessionID,
 	)
 	return i, err
 }
@@ -190,30 +83,6 @@ func (q *Queries) GetSessionState(ctx context.Context, sessionID string) (Sessio
 	return i, err
 }
 
-const insertEvent = `-- name: InsertEvent :exec
-INSERT INTO events (id, event_type, received, payload, session_id)
-VALUES (?, ?, ?, ?, ?)
-`
-
-type InsertEventParams struct {
-	ID        string         `json:"id"`
-	EventType string         `json:"event_type"`
-	Received  string         `json:"received"`
-	Payload   string         `json:"payload"`
-	SessionID sql.NullString `json:"session_id"`
-}
-
-func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error {
-	_, err := q.db.ExecContext(ctx, insertEvent,
-		arg.ID,
-		arg.EventType,
-		arg.Received,
-		arg.Payload,
-		arg.SessionID,
-	)
-	return err
-}
-
 const insertResearchChunk = `-- name: InsertResearchChunk :exec
 INSERT INTO research_chunks (entry, heading, text, vector, dim, doc_id)
 VALUES (?, ?, ?, ?, ?, ?)
@@ -238,47 +107,6 @@ func (q *Queries) InsertResearchChunk(ctx context.Context, arg InsertResearchChu
 		arg.DocID,
 	)
 	return err
-}
-
-const recentEvents = `-- name: RecentEvents :many
-SELECT id, event_type, received, payload, session_id FROM events
-ORDER BY received DESC
-LIMIT ?
-OFFSET ?
-`
-
-type RecentEventsParams struct {
-	Limit  int64 `json:"limit"`
-	Offset int64 `json:"offset"`
-}
-
-func (q *Queries) RecentEvents(ctx context.Context, arg RecentEventsParams) ([]Event, error) {
-	rows, err := q.db.QueryContext(ctx, recentEvents, arg.Limit, arg.Offset)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	items := []Event{}
-	for rows.Next() {
-		var i Event
-		if err := rows.Scan(
-			&i.ID,
-			&i.EventType,
-			&i.Received,
-			&i.Payload,
-			&i.SessionID,
-		); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Close(); err != nil {
-		return nil, err
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
 }
 
 const researchChunkByDocID = `-- name: ResearchChunkByDocID :one

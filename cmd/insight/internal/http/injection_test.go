@@ -2,8 +2,10 @@ package httphandler_test
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -15,6 +17,7 @@ import (
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
 
@@ -79,8 +82,9 @@ func writeCorpus(t *testing.T, index string, docs map[string]string) string {
 // injectionFixture wires a real Bleve index, a real temp DB, and a
 // temp corpus behind an InjectionHandler served by a test HTTP server.
 type injectionFixture struct {
-	server *httptest.Server
-	cwd    string
+	server  *httptest.Server
+	cwd     string
+	queries *db.Queries
 }
 
 func newInjectionFixture(t *testing.T, index string, docs map[string]string, emb research.Embedding) *injectionFixture {
@@ -99,11 +103,21 @@ func newInjectionFixture(t *testing.T, index string, docs map[string]string, emb
 
 	logger := slog.New(slog.DiscardHandler)
 	ranker := research.NewRanker(indexer, queries, emb)
-	eventHandler := insighthttp.NewEventHandler(storage, nil, logger)
-	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, eventHandler, logger)
-	router := insighthttp.Router(storage, nil, logger, injection)
+	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, logger)
+	router := insighthttp.Router(injection)
 
-	return &injectionFixture{server: testutil.NewTestServer(t, router), cwd: cwd}
+	return &injectionFixture{
+		server: testutil.NewTestServer(t, router), cwd: cwd, queries: queries,
+	}
+}
+
+// sizedUpsBody returns a valid UserPromptSubmit body of exactly size
+// bytes for session, padding the pad field.
+func sizedUpsBody(session, cwd string, size int) []byte {
+	base := fmt.Sprintf(`{"session_id":%q,"cwd":%q,"prompt":"zebra","pad":""}`, session, cwd)
+	pad := size - len(base)
+
+	return []byte(base[:len(base)-2] + strings.Repeat("a", pad) + `"}`)
 }
 
 // upsPayload is the UserPromptSubmit request body.
@@ -157,6 +171,10 @@ func TestInjectionUpsRelevant(t *testing.T) {
 	defer resp.Body.Close()
 
 	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
+		t.Errorf("Content-Type = %q, want application/json", ct)
+	}
 
 	event, ctx := additionalContext(t, testutil.ReadBody(resp))
 	if event != "UserPromptSubmit" {
@@ -314,63 +332,6 @@ func TestInjectionEmbedderDown(t *testing.T) {
 	}
 }
 
-func TestInjectionStoresEvents(t *testing.T) {
-	t.Parallel()
-
-	emb := &mapEmbedder{
-		def:     []float32{0, 1},
-		vectors: map[string][]float32{"zebra": {1, 0}, "Alpha zebra body": {1, 0}},
-	}
-
-	fx := newInjectionFixture(t,
-		"- [Alpha Doc]("+raPath+") — alpha desc\n",
-		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
-		emb)
-
-	ups := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
-	defer ups.Body.Close()
-
-	testutil.AssertStatus(t, ups, http.StatusOK)
-	testutil.ReadBody(ups)
-
-	ptu := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), map[string]any{
-		"session_id": "s1",
-		"cwd":        fx.cwd,
-		"tool_name":  "Bash",
-		"tool_input": map[string]any{"command": "ls"},
-	})
-	defer ptu.Body.Close()
-
-	testutil.AssertStatus(t, ptu, http.StatusOK)
-	testutil.ReadBody(ptu)
-
-	resp := testutil.Get(t, fx.server, "/hooks/v1/events/session/s1")
-	defer resp.Body.Close()
-
-	testutil.AssertStatus(t, resp, http.StatusOK)
-
-	var evts []map[string]any
-	if err := json.Unmarshal(testutil.ReadBody(resp), &evts); err != nil {
-		t.Fatalf("decode events: %v", err)
-	}
-
-	if len(evts) != 2 {
-		t.Fatalf("stored %d events, want 2", len(evts))
-	}
-
-	seen := map[string]bool{}
-
-	for _, e := range evts {
-		if et, ok := e["event_type"].(string); ok {
-			seen[et] = true
-		}
-	}
-
-	if !seen["UserPromptSubmit"] || !seen["PreToolUse"] {
-		t.Errorf("stored event types = %v, want UserPromptSubmit and PreToolUse", seen)
-	}
-}
-
 func TestInjectionMissingFields(t *testing.T) {
 	t.Parallel()
 
@@ -396,5 +357,256 @@ func TestInjectionMissingFields(t *testing.T) {
 		if body := string(testutil.ReadBody(resp)); body != "" {
 			t.Errorf("%s: UPS body = %q, want empty", name, body)
 		}
+	}
+}
+
+func TestInjectionPayloadSize(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def:     []float32{0, 1},
+		vectors: map[string][]float32{"zebra": {1, 0}, "Alpha zebra body": {1, 0}},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n",
+		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
+		emb)
+
+	maxSize := 1 << 20 // must match httphandler.maxPayloadBytes
+
+	cases := []struct {
+		name, session string
+		size          int
+		wantEmpty     bool
+	}{
+		{"at limit", "s1", maxSize, false},
+		{"over limit", "s2", maxSize + 1, true},
+		{"half size", "s3", 3 << 18, false},  // above a halved limit
+		{"double size", "s4", 5 << 18, true}, // below a doubled limit
+	}
+
+	for _, tc := range cases {
+		body := sizedUpsBody(tc.session, fx.cwd, tc.size)
+
+		resp := testutil.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
+		defer resp.Body.Close()
+
+		testutil.AssertStatus(t, resp, http.StatusOK)
+
+		empty := strings.TrimSpace(string(testutil.ReadBody(resp))) == ""
+		if empty != tc.wantEmpty {
+			t.Errorf("%s: empty body = %v, want %v", tc.name, empty, tc.wantEmpty)
+		}
+	}
+}
+
+func TestInjectionMalformedPayload(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def:     []float32{0, 1},
+		vectors: map[string][]float32{"zebra": {1, 0}, "Alpha zebra body": {1, 0}},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n",
+		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
+		emb)
+
+	// Valid fields but a truncated object: unmarshal fills the payload
+	// before failing, so only decode's failure path keeps it empty.
+	body := []byte(`{"session_id":"s1","cwd":"` + fx.cwd + `","prompt":"zebra"`)
+
+	resp := testutil.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	if b := string(testutil.ReadBody(resp)); b != "" {
+		t.Errorf("UPS body = %q, want empty (malformed payload)", b)
+	}
+}
+
+func TestInjectionPtuToolInput(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def: []float32{0, 1},
+		vectors: map[string][]float32{
+			`{"command":"zebra"}`: {1, 0},
+			"Alpha zebra body":    {1, 0},
+		},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n",
+		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
+		emb)
+
+	ptu := map[string]any{
+		"session_id": "s1",
+		"cwd":        fx.cwd,
+		"tool_input": map[string]any{"command": "zebra"},
+	}
+
+	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	event, ctx := additionalContext(t, testutil.ReadBody(resp))
+	if event != "PreToolUse" || !strings.Contains(ctx, raPath) {
+		t.Fatalf("PTU = %q / %q, want Alpha offered from the tool input", event, ctx)
+	}
+}
+
+func TestInjectionPtuLastPrompt(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def:     []float32{0, 1},
+		vectors: map[string][]float32{"zebra": {1, 0}, "Alpha zebra body": {1, 0}},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n",
+		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
+		emb)
+
+	// Seed a persisted prompt; with no transcript or tool input it is
+	// the PTU's only query segment.
+	if err := fx.queries.UpsertSessionState(context.Background(), db.UpsertSessionStateParams{
+		SessionID: "s1", TranscriptOffset: 0, InjectedEntries: "[]", LastPrompt: "zebra",
+	}); err != nil {
+		t.Fatalf("seed session state: %v", err)
+	}
+
+	ptu := map[string]any{"session_id": "s1", "cwd": fx.cwd}
+
+	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	event, ctx := additionalContext(t, testutil.ReadBody(resp))
+	if event != "PreToolUse" || !strings.Contains(ctx, raPath) {
+		t.Fatalf("PTU = %q / %q, want Alpha offered from the persisted prompt", event, ctx)
+	}
+}
+
+func TestInjectionUpsPersistsPrompt(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def: []float32{0, 1},
+		vectors: map[string][]float32{
+			"zebra":            {1, 0},
+			"Alpha zebra body": {1, 0},
+			"yak":              {0, 1},
+			"Beta yak body":    {0, 1},
+		},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n- [Beta Doc]("+rbPath+") — beta desc\n",
+		map[string]string{
+			raPath: "# Alpha\n\nzebra body\n",
+			rbPath: "# Beta\n\nyak body\n",
+		},
+		emb)
+
+	// Seed a stale prompt: the UPS must overwrite it, so the follow-up
+	// PTU (whose only segment is the persisted prompt) finds only the
+	// already-injected Alpha.
+	if err := fx.queries.UpsertSessionState(context.Background(), db.UpsertSessionStateParams{
+		SessionID: "s1", TranscriptOffset: 0, InjectedEntries: "[]", LastPrompt: "yak",
+	}); err != nil {
+		t.Fatalf("seed session state: %v", err)
+	}
+
+	ups := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	defer ups.Body.Close()
+
+	testutil.AssertStatus(t, ups, http.StatusOK)
+
+	if _, ctx := additionalContext(t, testutil.ReadBody(ups)); !strings.Contains(ctx, raPath) {
+		t.Fatalf("UPS = %q, want Alpha offered", ctx)
+	}
+
+	ptu := map[string]any{"session_id": "s1", "cwd": fx.cwd}
+
+	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	if body := string(testutil.ReadBody(resp)); body != "" {
+		t.Errorf("PTU body = %q, want empty (the UPS persisted its prompt)", body)
+	}
+}
+
+func TestInjectionPtuMissingSession(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def:     []float32{0, 1},
+		vectors: map[string][]float32{"yak": {0, 1}, "Beta yak body": {0, 1}},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Beta Doc]("+rbPath+") — beta desc\n",
+		map[string]string{rbPath: "# Beta\n\nyak body\n"},
+		emb)
+
+	transcript := filepath.Join(t.TempDir(), "transcript.jsonl")
+
+	assistant := `{"type":"assistant","isSidechain":false,"message":{"content":[{"type":"text","text":"yak"}]}}`
+	if err := os.WriteFile(transcript, []byte(assistant+"\n"), 0o600); err != nil {
+		t.Fatalf("write transcript: %v", err)
+	}
+
+	ptu := map[string]any{
+		"cwd":             fx.cwd,
+		"transcript_path": transcript,
+	}
+
+	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	if body := string(testutil.ReadBody(resp)); body != "" {
+		t.Errorf("PTU body = %q, want empty (missing session_id)", body)
+	}
+}
+
+func TestInjectionUpsMissingCwdLeavesNoState(t *testing.T) {
+	t.Parallel()
+
+	emb := &mapEmbedder{
+		def:     []float32{0, 1},
+		vectors: map[string][]float32{"zebra": {1, 0}, "Alpha zebra body": {1, 0}},
+	}
+
+	fx := newInjectionFixture(t,
+		"- [Alpha Doc]("+raPath+") — alpha desc\n",
+		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
+		emb)
+
+	payload := map[string]any{"session_id": "s1", "prompt": "zebra"}
+
+	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
+	defer resp.Body.Close()
+
+	testutil.AssertStatus(t, resp, http.StatusOK)
+
+	if body := string(testutil.ReadBody(resp)); body != "" {
+		t.Errorf("UPS body = %q, want empty (missing cwd)", body)
+	}
+
+	// A rejected request must not create session state.
+	if _, err := fx.queries.GetSessionState(context.Background(), "s1"); !errors.Is(err, sql.ErrNoRows) {
+		t.Errorf("GetSessionState(s1) = %v, want sql.ErrNoRows", err)
 	}
 }

@@ -7,7 +7,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -17,20 +16,7 @@ func TestResearchEntriesRoundTrip(t *testing.T) {
 
 	ctx := context.Background()
 
-	// Fresh DB: goose applies 00001 and 00002. Seed one event and
-	// reopen so the storage below is an existing events DB.
 	storageInst := testutil.NewTestStorage(t)
-
-	evt := events.NewEnvelope(testutil.EventSessionStart, map[string]any{})
-	if err := storageInst.Store(ctx, evt); err != nil {
-		t.Fatalf("failed to seed event: %v", err)
-	}
-
-	if err := storageInst.Close(); err != nil {
-		t.Fatalf("failed to close storage: %v", err)
-	}
-
-	storageInst = testutil.NewTestStorage(t)
 	q := storageInst.QueriesForTest()
 
 	mtime := "2026-08-16T00:00:00Z"

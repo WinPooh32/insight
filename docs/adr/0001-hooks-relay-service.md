@@ -52,3 +52,9 @@ with embedded SQL files.
 - Bleve text-only ([ADR 0002](0002-bleve-text-index-for-research-search.md))
   is a pure-Go dependency in the same category as `modernc.org/sqlite` — no
   new constraint.
+- **Date:** 2026-08-16
+- The service is re-scoped to the research-link injection endpoints
+  (`POST /hooks/v1/user-prompt-submit`, `POST /hooks/v1/pre-tool-use`) only.
+  Event storage, the event query API (`GET /hooks/v1/events`), and the
+  health endpoint are removed; the Consequences about event queryability
+  and retention are superseded.

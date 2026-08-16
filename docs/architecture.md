@@ -59,7 +59,7 @@ hook returns an empty body and the prompt proceeds.
 ## Storage
 
 - Bleve index directory (text-only).
-- SQLite, new tables beside the existing event tables:
+- SQLite tables:
   - `research_entries` — project, title, path, description, mtime
   - `research_chunks` — entry, heading, text, vector BLOB, dim
   - `embed_cache` — sha256(text) → vector, dim, model

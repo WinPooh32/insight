@@ -6,7 +6,6 @@ ignore .claude
 
 require (
 	github.com/blevesearch/bleve/v2 v2.6.0
-	github.com/google/uuid v1.6.0
 	github.com/pressly/goose/v3 v3.27.3
 	modernc.org/sqlite v1.56.0
 )
@@ -34,6 +33,7 @@ require (
 	github.com/blevesearch/zapx/v17 v17.1.2 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/golang/snappy v1.0.0 // indirect
+	github.com/google/uuid v1.6.0 // indirect
 	github.com/json-iterator/go v0.0.0-20171115153421-f7279a603ede // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/mfridman/interpolate v0.0.2 // indirect

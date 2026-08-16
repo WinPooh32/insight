@@ -15,7 +15,6 @@ import (
 	"github.com/pressly/goose/v3/database"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/config"
-	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/research"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
@@ -98,7 +97,9 @@ func openDatabase(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	return sdb, nil
 }
 
-func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage.Storage, *research.Indexer, error) {
+func createServer(
+	ctx context.Context, cfg config.Config,
+) (*http.Server, *storage.SQLiteStorage, *research.Indexer, error) {
 	stor, err := storage.NewSQLiteStorage(ctx, cfg.DBPath(), cfg.Logger)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create storage: %w", err)
@@ -120,13 +121,11 @@ func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage
 	}
 
 	ranker := research.NewRanker(indexer, queries, embedder)
-	filter := events.NewAllowList(cfg.EventFilter)
-	eventHandler := insighthttp.NewEventHandler(stor, filter, cfg.Logger)
-	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, eventHandler, cfg.Logger)
+	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, cfg.Logger)
 
 	server := &http.Server{
 		Addr:                         cfg.Addr(),
-		Handler:                      insighthttp.Router(stor, filter, cfg.Logger, injection),
+		Handler:                      insighthttp.Router(injection),
 		ReadHeaderTimeout:            readTimeout,
 		ReadTimeout:                  readTimeout,
 		WriteTimeout:                 writeTimeout,

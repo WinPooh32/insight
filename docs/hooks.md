@@ -1,9 +1,9 @@
 # Claude Code operator hooks
 
 `.claude/settings.json` wires two `type: "http"` hooks to the insight
-injection endpoints. Each request stores the event. The response is
-`hookSpecificOutput` carrying the top-3 research links as
-`additionalContext`. An empty 200 body means nothing relevant was found.
+injection endpoints. The response is `hookSpecificOutput` carrying the
+top-3 research links as `additionalContext`. An empty 200 body means
+nothing relevant was found.
 
 | Event            | Matcher                               | URL                                                 |
 | ---------------- | ------------------------------------- | --------------------------------------------------- |

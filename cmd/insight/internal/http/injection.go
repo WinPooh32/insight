@@ -24,6 +24,9 @@ const injectionDeadline = 110 * time.Second
 // additionalContext message.
 const contextHeader = "These researches may be relevant to the task:\n"
 
+// maxPayloadBytes bounds the request body the injection endpoints read.
+const maxPayloadBytes = 1 << 20 // 1 MB
+
 // Hook event types served by the injection endpoints.
 const (
 	userPromptSubmit = "UserPromptSubmit"
@@ -31,28 +34,24 @@ const (
 )
 
 // InjectionHandler serves the UserPromptSubmit and PreToolUse hooks.
-// It stores the event like any hook ingest, then offers the top
-// relevant research entries as additionalContext. Every failure mode
-// degrades to a 200 with an empty body.
+// It offers the top relevant research entries as additionalContext.
+// Every failure mode degrades to a 200 with an empty body.
 type InjectionHandler struct {
 	indexer *research.Indexer
 	ranker  *research.Ranker
 	session research.SessionQueries
-	events  *EventHandler
 	log     *slog.Logger
 }
 
 // NewInjectionHandler creates an InjectionHandler. session must share
 // the storage's database pool (e.g. SQLiteStorage.Queries()).
 func NewInjectionHandler(
-	indexer *research.Indexer, ranker *research.Ranker, session research.SessionQueries,
-	events *EventHandler, logger *slog.Logger,
+	indexer *research.Indexer, ranker *research.Ranker, session research.SessionQueries, logger *slog.Logger,
 ) *InjectionHandler {
 	return &InjectionHandler{
 		indexer: indexer,
 		ranker:  ranker,
 		session: session,
-		events:  events,
 		log:     logger,
 	}
 }
@@ -85,8 +84,6 @@ func (h *InjectionHandler) UserPromptSubmit(w http.ResponseWriter, r *http.Reque
 		return
 	}
 
-	h.store(w, r, userPromptSubmit)
-
 	ctx, cancel := context.WithTimeout(r.Context(), injectionDeadline)
 	defer cancel()
 
@@ -115,8 +112,6 @@ func (h *InjectionHandler) PreToolUse(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.store(w, r, preToolUse)
-
 	ctx, cancel := context.WithTimeout(r.Context(), injectionDeadline)
 	defer cancel()
 
@@ -129,8 +124,7 @@ func (h *InjectionHandler) PreToolUse(w http.ResponseWriter, r *http.Request) {
 	h.respond(ctx, w, preToolUse, p.Cwd, p.SessionID, segments)
 }
 
-// decode reads the bounded request body into p and resets r.Body so
-// the EventHandler can re-read it for storage. It returns false when
+// decode reads the bounded request body into p. It returns false when
 // the body is missing, oversized, or not valid JSON; the caller
 // returns a 200 empty body in that case.
 func (h *InjectionHandler) decode(r *http.Request, p any) bool {
@@ -143,18 +137,7 @@ func (h *InjectionHandler) decode(r *http.Request, p any) bool {
 		return false
 	}
 
-	r.Body = io.NopCloser(bytes.NewReader(raw))
-
 	return true
-}
-
-// store re-reads the (reset) request body through the EventHandler's
-// decode+allowlist+store path. A filtered or failed store is logged
-// but not surfaced: the injection response is always 200.
-func (h *InjectionHandler) store(w http.ResponseWriter, r *http.Request, eventType string) {
-	if _, err := h.events.Store(w, r, eventType); err != nil && !errors.Is(err, errFiltered) {
-		h.log.WarnContext(r.Context(), "store hook event", "event_type", eventType, "error", err)
-	}
 }
 
 // ptuSegments builds the PreToolUse query segments: the persisted

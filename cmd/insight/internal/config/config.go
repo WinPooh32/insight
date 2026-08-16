@@ -5,16 +5,14 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"strings"
 )
 
 // Config holds the relay service configuration.
 type Config struct {
-	Port        int
-	Host        string
-	DataDir     string
-	EventFilter []string // allowed event types; empty = allow all
-	Logger      *slog.Logger
+	Port    int
+	Host    string
+	DataDir string
+	Logger  *slog.Logger
 
 	EmbedBaseURL string // OpenAI-compatible embeddings API base, e.g. http://localhost:8080/v1
 	EmbedModel   string
@@ -55,8 +53,6 @@ func DefaultConfig() Config {
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &opts))
 
-	eventFilter := parseEventFilter()
-
 	embedBaseURL := os.Getenv("EMBED_BASE_URL")
 	if embedBaseURL == "" {
 		embedBaseURL = "http://localhost:8080/v1"
@@ -69,46 +65,11 @@ func DefaultConfig() Config {
 		Port:         port,
 		Host:         host,
 		DataDir:      dataDir,
-		EventFilter:  eventFilter,
 		Logger:       logger,
 		EmbedBaseURL: embedBaseURL,
 		EmbedModel:   embedModel,
 		EmbedAPIKey:  embedAPIKey,
 	}
-}
-
-// parseEventFilter reads INSIGHT_EVENT_FILTER, splits on comma, trims whitespace,
-// and deduplicates. Empty string returns nil (meaning "allow all").
-func parseEventFilter() []string {
-	raw := os.Getenv("INSIGHT_EVENT_FILTER")
-	if raw == "" {
-		return nil
-	}
-
-	parts := strings.Split(raw, ",")
-	seen := make(map[string]struct{}, len(parts))
-
-	var result []string
-
-	for _, p := range parts {
-		trimmed := strings.TrimSpace(p)
-		if trimmed == "" {
-			continue
-		}
-
-		if _, ok := seen[trimmed]; ok {
-			continue
-		}
-
-		seen[trimmed] = struct{}{}
-		result = append(result, trimmed)
-	}
-
-	if len(result) == 0 {
-		return nil
-	}
-
-	return result
 }
 
 // Addr returns the listen address for the HTTP server.

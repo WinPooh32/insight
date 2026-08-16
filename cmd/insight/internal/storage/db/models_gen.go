@@ -15,14 +15,6 @@ type EmbedCache struct {
 	Model  string `json:"model"`
 }
 
-type Event struct {
-	ID        string         `json:"id"`
-	EventType string         `json:"event_type"`
-	Received  string         `json:"received"`
-	Payload   string         `json:"payload"`
-	SessionID sql.NullString `json:"session_id"`
-}
-
 type ResearchChunk struct {
 	ID      int64         `json:"id"`
 	Entry   int64         `json:"entry"`

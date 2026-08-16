@@ -11,19 +11,10 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/events"
-	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
 
 	// sqlite driver required for storage initialization.
 	_ "modernc.org/sqlite"
-)
-
-// Common test constants.
-const (
-	TestSessionID     = "session_id"
-	EventSessionStart = "SessionStart"
-	EventUserPrompt   = "UserPromptSubmit"
 )
 
 // NewTestStorage creates a SQLiteStorage instance backed by a temp dir.
@@ -46,55 +37,6 @@ func NewTestStorage(tb testing.TB) *storage.SQLiteStorage {
 	return storageInst
 }
 
-// NewTestStorageWithLog creates a SQLiteStorage instance with a custom log buffer.
-func NewTestStorageWithLog(tb testing.TB, logBuf *bytes.Buffer) *storage.SQLiteStorage {
-	tb.Helper()
-
-	tmpDir := tb.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := slog.New(slog.NewTextHandler(logBuf, nil))
-
-	storageInst, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger)
-	if err != nil {
-		tb.Fatalf("failed to create storage: %v", err)
-	}
-
-	tb.Cleanup(func() { storageInst.Close() })
-
-	return storageInst
-}
-
-// NewTestRouter creates an HTTP router backed by a temp storage.
-// No event filter is applied (all events allowed).
-func NewTestRouter(tb testing.TB) http.Handler {
-	tb.Helper()
-
-	storageInst := NewTestStorage(tb)
-
-	return insighthttp.Router(storageInst, nil, slog.New(slog.DiscardHandler), nil)
-}
-
-// NewTestRouterWithLog creates an HTTP router and captures logs.
-// No event filter is applied (all events allowed).
-func NewTestRouterWithLog(tb testing.TB, logBuf *bytes.Buffer) http.Handler {
-	tb.Helper()
-
-	storageInst := NewTestStorageWithLog(tb, logBuf)
-
-	return insighthttp.Router(storageInst, nil, slog.New(slog.NewTextHandler(logBuf, nil)), nil)
-}
-
-// NewTestRouterWithFilter creates an HTTP router with a custom event filter.
-func NewTestRouterWithFilter(tb testing.TB, filter []string) http.Handler {
-	tb.Helper()
-
-	storageInst := NewTestStorage(tb)
-	allowList := events.NewAllowList(filter)
-
-	return insighthttp.Router(storageInst, allowList, slog.New(slog.DiscardHandler), nil)
-}
-
 // NewTestServer creates an httptest.Server from a router and registers cleanup.
 func NewTestServer(tb testing.TB, router http.Handler) *httptest.Server {
 	tb.Helper()
@@ -103,15 +45,6 @@ func NewTestServer(tb testing.TB, router http.Handler) *httptest.Server {
 	tb.Cleanup(server.Close)
 
 	return server
-}
-
-// NewTestEnv creates a test environment and returns an httptest.Server.
-func NewTestEnv(tb testing.TB) *httptest.Server {
-	tb.Helper()
-
-	router := NewTestRouter(tb)
-
-	return NewTestServer(tb, router)
 }
 
 // PostJSON sends a POST request with JSON payload and returns the response.
@@ -141,7 +74,8 @@ func PostJSON(tb testing.TB, server *httptest.Server, endpoint string, payload a
 	return resp
 }
 
-// PostRaw sends a POST request with raw bytes and returns the response.
+// PostRaw sends a POST request with a raw body and returns the
+// response. Caller is responsible for closing resp.Body.
 func PostRaw(tb testing.TB, server *httptest.Server, endpoint string, body []byte) *http.Response {
 	tb.Helper()
 
@@ -153,23 +87,6 @@ func PostRaw(tb testing.TB, server *httptest.Server, endpoint string, body []byt
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := http.DefaultClient.Do(req)
-	if err != nil {
-		tb.Fatalf("execute request: %v", err)
-	}
-
-	return resp
-}
-
-// Get sends a GET request and returns the response.
-func Get(tb testing.TB, server *httptest.Server, endpoint string) *http.Response {
-	tb.Helper()
-
-	req, err := http.NewRequestWithContext(context.Background(), http.MethodGet, server.URL+endpoint, nil)
-	if err != nil {
-		tb.Fatalf("create request: %v", err)
-	}
 
 	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
