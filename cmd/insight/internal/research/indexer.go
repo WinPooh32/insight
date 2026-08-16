@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/blevesearch/bleve/v2"
@@ -222,15 +223,26 @@ func (i *Indexer) reindexEntry(ctx context.Context, project, path string,
 func (i *Indexer) embedSections(ctx context.Context, sections []section) ([][]float32, error) {
 	vecs := make([][]float32, len(sections))
 
+	wg := sync.WaitGroup{}
+	errs := make([]error, len(sections))
+
 	for n, s := range sections {
-		text := strings.TrimSpace(s.heading + " " + s.body)
+		wg.Go(func() {
+			text := strings.TrimSpace(s.heading + " " + s.body)
 
-		vec, err := i.embed.Embed(ctx, text)
-		if err != nil {
-			return nil, fmt.Errorf("embed section: %w", err)
-		}
+			vec, err := i.embed.Embed(ctx, text)
+			if err != nil {
+				errs[n] = err
+			}
 
-		vecs[n] = vec
+			vecs[n] = vec
+		})
+	}
+
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, fmt.Errorf("embed sections: %w", err)
 	}
 
 	return vecs, nil

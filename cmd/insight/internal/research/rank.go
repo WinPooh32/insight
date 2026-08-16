@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"math"
 	"sort"
+	"sync"
 
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search/query"
@@ -121,13 +122,25 @@ func (r *Ranker) Rank(ctx context.Context, project, sessionID string, segments [
 func (r *Ranker) embedSegments(ctx context.Context, segments []string) ([][]float32, error) {
 	vecs := make([][]float32, len(segments))
 
-	for n, s := range segments {
-		vec, err := r.embed.Embed(ctx, s)
-		if err != nil {
-			return nil, fmt.Errorf("embed query segment: %w", err)
-		}
+	wg := sync.WaitGroup{}
+	errs := make([]error, len(segments))
 
-		vecs[n] = vec
+	for n, s := range segments {
+		wg.Go(func() {
+			vec, err := r.embed.Embed(ctx, s)
+			if err != nil {
+				errs[n] = err
+				return
+			}
+
+			vecs[n] = vec
+		})
+	}
+
+	wg.Wait()
+
+	if err := errors.Join(errs...); err != nil {
+		return nil, fmt.Errorf("embed query segments: %w", err)
 	}
 
 	return vecs, nil
