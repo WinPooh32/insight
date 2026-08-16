@@ -191,6 +191,13 @@ make test
 make lint
 ```
 
+### Testing coverage
+Minimal value is 60%
+
+```bash
+make test/coverage
+```
+
 ### Mutation testing
 Minimal mutation testing score is 0.60
 
