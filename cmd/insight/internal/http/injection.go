@@ -20,6 +20,10 @@ import (
 // fit Claude Code's 30 s budget, so this sits below it.
 const injectionDeadline = 25 * time.Second
 
+// contextHeader introduces the injected research links in the
+// additionalContext message.
+const contextHeader = "These researches may be relevant to the task:\n"
+
 // Hook event types served by the injection endpoints.
 const (
 	userPromptSubmit = "UserPromptSubmit"
@@ -241,14 +245,16 @@ func (h *InjectionHandler) respond(
 		lines = append(lines, "- ["+e.Title+"]("+e.Path+") — "+e.Description)
 	}
 
+	content := contextHeader + strings.Join(lines, "\n")
+
 	h.log.InfoContext(ctx, "inject additional context",
 		"event_type", event, "session_id", sessionID,
-		"content", strings.Join(lines, "\n"))
+		"content", content)
 
 	resp := map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     event,
-			"additionalContext": strings.Join(lines, "\n"),
+			"additionalContext": content,
 		},
 	}
 

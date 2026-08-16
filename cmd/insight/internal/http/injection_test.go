@@ -163,7 +163,8 @@ func TestInjectionUpsRelevant(t *testing.T) {
 		t.Errorf("hookEventName = %q, want UserPromptSubmit", event)
 	}
 
-	want := "- [Alpha Doc](" + raPath + ") — alpha desc\n- [Beta Doc](" + rbPath + ") — beta desc"
+	want := "These researches may be relevant to the task:\n" +
+		"- [Alpha Doc](" + raPath + ") — alpha desc\n- [Beta Doc](" + rbPath + ") — beta desc"
 	if ctx != want {
 		t.Errorf("additionalContext = %q, want %q", ctx, want)
 	}
