@@ -23,8 +23,8 @@ import (
 
 const (
 	// requestTimeout bounds one embeddings API call; the whole hook must
-	// fit Claude Code's 30 s budget.
-	requestTimeout = 10 * time.Second
+	// fit Claude Code's 120 s budget.
+	requestTimeout = 110 * time.Second
 
 	// errBodyLimit caps error body text included in API errors.
 	errBodyLimit = 512
