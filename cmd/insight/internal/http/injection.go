@@ -241,6 +241,10 @@ func (h *InjectionHandler) respond(
 		lines = append(lines, "- ["+e.Title+"]("+e.Path+") — "+e.Description)
 	}
 
+	h.log.InfoContext(ctx, "inject additional context",
+		"event_type", event, "session_id", sessionID,
+		"content", strings.Join(lines, "\n"))
+
 	resp := map[string]any{
 		"hookSpecificOutput": map[string]any{
 			"hookEventName":     event,
