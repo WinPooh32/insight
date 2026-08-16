@@ -11,7 +11,9 @@ framework supports `type: "http"` hooks that POST to a local endpoint.
 
 ### Constraints
 
-- Must run on localhost with zero external dependencies
+- Must run on localhost with an optional localhost embedding server; cloud
+  embeddings only by explicit configuration (amended 2026-08-16; see
+  [Amendment](#amendment))
 - Must support querying events by session, type, and time range after the fact
 - Should be type-safe to avoid runtime errors from schema drift
 
@@ -39,3 +41,14 @@ with embedded SQL files.
 - Events accumulate indefinitely; no retention policy (future work)
 - Service binds to localhost only by default; not suitable for multi-machine setups
 - Pure Go SQLite (`modernc.org/sqlite`) eliminates system-level SQLite dependency
+
+## Amendment
+
+- **Date:** 2026-08-16
+- The "zero external dependencies" constraint is amended to "optional
+  localhost embedding server; cloud embeddings only by explicit
+  configuration" (see [architecture](../architecture.md), "Constraints and
+  rationale").
+- Bleve text-only ([ADR 0002](0002-bleve-text-index-for-research-search.md))
+  is a pure-Go dependency in the same category as `modernc.org/sqlite` — no
+  new constraint.

@@ -8,10 +8,43 @@ import (
 	"database/sql"
 )
 
+type EmbedCache struct {
+	Sha256 string `json:"sha256"`
+	Vector []byte `json:"vector"`
+	Dim    int64  `json:"dim"`
+	Model  string `json:"model"`
+}
+
 type Event struct {
 	ID        string         `json:"id"`
 	EventType string         `json:"event_type"`
 	Received  string         `json:"received"`
 	Payload   string         `json:"payload"`
 	SessionID sql.NullString `json:"session_id"`
+}
+
+type ResearchChunk struct {
+	ID      int64         `json:"id"`
+	Entry   int64         `json:"entry"`
+	Heading string        `json:"heading"`
+	Text    string        `json:"text"`
+	Vector  []byte        `json:"vector"`
+	Dim     sql.NullInt64 `json:"dim"`
+	DocID   string        `json:"doc_id"`
+}
+
+type ResearchEntry struct {
+	ID          int64  `json:"id"`
+	Project     string `json:"project"`
+	Title       string `json:"title"`
+	Path        string `json:"path"`
+	Description string `json:"description"`
+	Mtime       string `json:"mtime"`
+}
+
+type SessionState struct {
+	SessionID        string `json:"session_id"`
+	TranscriptOffset int64  `json:"transcript_offset"`
+	InjectedEntries  string `json:"injected_entries"`
+	LastPrompt       string `json:"last_prompt"`
 }

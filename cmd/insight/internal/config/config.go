@@ -15,6 +15,10 @@ type Config struct {
 	DataDir     string
 	EventFilter []string // allowed event types; empty = allow all
 	Logger      *slog.Logger
+
+	EmbedBaseURL string // OpenAI-compatible embeddings API base, e.g. http://localhost:8080/v1
+	EmbedModel   string
+	EmbedAPIKey  string // empty for local serving
 }
 
 // DefaultConfig loads configuration from environment variables.
@@ -53,12 +57,23 @@ func DefaultConfig() Config {
 
 	eventFilter := parseEventFilter()
 
+	embedBaseURL := os.Getenv("EMBED_BASE_URL")
+	if embedBaseURL == "" {
+		embedBaseURL = "http://localhost:8080/v1"
+	}
+
+	embedModel := os.Getenv("EMBED_MODEL")
+	embedAPIKey := os.Getenv("EMBED_API_KEY")
+
 	return Config{
-		Port:        port,
-		Host:        host,
-		DataDir:     dataDir,
-		EventFilter: eventFilter,
-		Logger:      logger,
+		Port:         port,
+		Host:         host,
+		DataDir:      dataDir,
+		EventFilter:  eventFilter,
+		Logger:       logger,
+		EmbedBaseURL: embedBaseURL,
+		EmbedModel:   embedModel,
+		EmbedAPIKey:  embedAPIKey,
 	}
 }
 

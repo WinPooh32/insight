@@ -1,0 +1,256 @@
+package httphandler
+
+import (
+	"bytes"
+	"context"
+	"database/sql"
+	"encoding/json"
+	"errors"
+	"io"
+	"log/slog"
+	"net/http"
+	"strings"
+	"time"
+
+	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
+)
+
+// injectionDeadline bounds the whole injection phase. The hook must
+// fit Claude Code's 30 s budget, so this sits below it.
+const injectionDeadline = 25 * time.Second
+
+// Hook event types served by the injection endpoints.
+const (
+	userPromptSubmit = "UserPromptSubmit"
+	preToolUse       = "PreToolUse"
+)
+
+// InjectionHandler serves the UserPromptSubmit and PreToolUse hooks.
+// It stores the event like any hook ingest, then offers the top
+// relevant research entries as additionalContext. Every failure mode
+// degrades to a 200 with an empty body.
+type InjectionHandler struct {
+	indexer *research.Indexer
+	ranker  *research.Ranker
+	session research.SessionQueries
+	events  *EventHandler
+	log     *slog.Logger
+}
+
+// NewInjectionHandler creates an InjectionHandler. session must share
+// the storage's database pool (e.g. SQLiteStorage.Queries()).
+func NewInjectionHandler(
+	indexer *research.Indexer, ranker *research.Ranker, session research.SessionQueries,
+	events *EventHandler, logger *slog.Logger,
+) *InjectionHandler {
+	return &InjectionHandler{
+		indexer: indexer,
+		ranker:  ranker,
+		session: session,
+		events:  events,
+		log:     logger,
+	}
+}
+
+// upsPayload is the UserPromptSubmit hook payload.
+type upsPayload struct {
+	SessionID      string `json:"session_id"`
+	TranscriptPath string `json:"transcript_path"`
+	Cwd            string `json:"cwd"`
+	Prompt         string `json:"prompt"`
+}
+
+// ptuPayload is the PreToolUse hook payload.
+type ptuPayload struct {
+	SessionID      string          `json:"session_id"`
+	TranscriptPath string          `json:"transcript_path"`
+	Cwd            string          `json:"cwd"`
+	ToolName       string          `json:"tool_name"`
+	ToolInput      json.RawMessage `json:"tool_input"`
+}
+
+// UserPromptSubmit handles the UserPromptSubmit injection hook.
+func (h *InjectionHandler) UserPromptSubmit(w http.ResponseWriter, r *http.Request) {
+	var p upsPayload
+	if !h.decode(r, &p) {
+		return
+	}
+
+	if p.SessionID == "" || p.Cwd == "" {
+		return
+	}
+
+	h.store(w, r, userPromptSubmit)
+
+	ctx, cancel := context.WithTimeout(r.Context(), injectionDeadline)
+	defer cancel()
+
+	if err := h.indexer.Index(ctx, p.Cwd, p.Cwd); err != nil {
+		h.log.WarnContext(ctx, "index research corpus", "error", err)
+	}
+
+	var segments []string
+	if p.Prompt != "" {
+		segments = append(segments, p.Prompt)
+	}
+
+	h.persistLastPrompt(ctx, p.SessionID, p.Prompt)
+
+	h.respond(ctx, w, userPromptSubmit, p.Cwd, p.SessionID, segments)
+}
+
+// PreToolUse handles the PreToolUse injection hook.
+func (h *InjectionHandler) PreToolUse(w http.ResponseWriter, r *http.Request) {
+	var p ptuPayload
+	if !h.decode(r, &p) {
+		return
+	}
+
+	if p.SessionID == "" || p.Cwd == "" {
+		return
+	}
+
+	h.store(w, r, preToolUse)
+
+	ctx, cancel := context.WithTimeout(r.Context(), injectionDeadline)
+	defer cancel()
+
+	if err := h.indexer.Index(ctx, p.Cwd, p.Cwd); err != nil {
+		h.log.WarnContext(ctx, "index research corpus", "error", err)
+	}
+
+	segments := h.ptuSegments(ctx, p)
+
+	h.respond(ctx, w, preToolUse, p.Cwd, p.SessionID, segments)
+}
+
+// decode reads the bounded request body into p and resets r.Body so
+// the EventHandler can re-read it for storage. It returns false when
+// the body is missing, oversized, or not valid JSON; the caller
+// returns a 200 empty body in that case.
+func (h *InjectionHandler) decode(r *http.Request, p any) bool {
+	raw, err := io.ReadAll(io.LimitReader(r.Body, maxPayloadBytes+1))
+	if err != nil || len(raw) > maxPayloadBytes {
+		return false
+	}
+
+	if err := json.Unmarshal(raw, p); err != nil {
+		return false
+	}
+
+	r.Body = io.NopCloser(bytes.NewReader(raw))
+
+	return true
+}
+
+// store re-reads the (reset) request body through the EventHandler's
+// decode+allowlist+store path. A filtered or failed store is logged
+// but not surfaced: the injection response is always 200.
+func (h *InjectionHandler) store(w http.ResponseWriter, r *http.Request, eventType string) {
+	if _, err := h.events.Store(w, r, eventType); err != nil && !errors.Is(err, errFiltered) {
+		h.log.WarnContext(r.Context(), "store hook event", "event_type", eventType, "error", err)
+	}
+}
+
+// ptuSegments builds the PreToolUse query segments: the persisted
+// last prompt, the new transcript delta, and the compacted tool
+// input, each included when non-empty.
+func (h *InjectionHandler) ptuSegments(ctx context.Context, p ptuPayload) []string {
+	var segments []string
+
+	if last := h.lastPrompt(ctx, p.SessionID); last != "" {
+		segments = append(segments, last)
+	}
+
+	delta, err := research.NewTranscript(p.TranscriptPath, h.session).Delta(ctx, p.SessionID)
+	if err != nil {
+		h.log.WarnContext(ctx, "read transcript delta", "error", err)
+	} else if delta != "" {
+		segments = append(segments, delta)
+	}
+
+	if len(p.ToolInput) > 0 {
+		var buf bytes.Buffer
+		if err := json.Compact(&buf, p.ToolInput); err == nil && buf.Len() > 0 {
+			segments = append(segments, buf.String())
+		}
+	}
+
+	return segments
+}
+
+// lastPrompt returns the persisted last prompt for sessionID, or ""
+// when the session has no row.
+func (h *InjectionHandler) lastPrompt(ctx context.Context, sessionID string) string {
+	state, err := h.session.GetSessionState(ctx, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return ""
+	}
+
+	if err != nil {
+		h.log.WarnContext(ctx, "get session state", "error", err)
+		return ""
+	}
+
+	return state.LastPrompt
+}
+
+// persistLastPrompt stores the last prompt for sessionID, preserving
+// the transcript offset and injected entries.
+func (h *InjectionHandler) persistLastPrompt(ctx context.Context, sessionID, prompt string) {
+	state, err := h.session.GetSessionState(ctx, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Seed a valid injected set so the ranker's dedup can parse
+		// the row on the same request.
+		state = db.SessionState{SessionID: sessionID, TranscriptOffset: 0, InjectedEntries: "[]", LastPrompt: ""}
+	} else if err != nil {
+		h.log.WarnContext(ctx, "get session state", "error", err)
+		return
+	}
+
+	state.LastPrompt = prompt
+
+	if err := h.session.UpsertSessionState(ctx, db.UpsertSessionStateParams(state)); err != nil {
+		h.log.WarnContext(ctx, "persist last prompt", "error", err)
+	}
+}
+
+// respond ranks the segments and writes the additionalContext
+// response when entries are offered. Every failure degrades to a 200
+// empty body.
+func (h *InjectionHandler) respond(
+	ctx context.Context, w http.ResponseWriter, event, cwd, sessionID string, segments []string,
+) {
+	if len(segments) == 0 {
+		return
+	}
+
+	ranked, err := h.ranker.Rank(ctx, cwd, sessionID, segments)
+	if err != nil {
+		h.log.WarnContext(ctx, "rank research entries", "error", err)
+		return
+	}
+
+	if len(ranked) == 0 {
+		return
+	}
+
+	lines := make([]string, 0, len(ranked))
+	for _, e := range ranked {
+		lines = append(lines, "- ["+e.Title+"]("+e.Path+") — "+e.Description)
+	}
+
+	resp := map[string]any{
+		"hookSpecificOutput": map[string]any{
+			"hookEventName":     event,
+			"additionalContext": strings.Join(lines, "\n"),
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.log.WarnContext(ctx, "encode injection response", "error", err)
+	}
+}

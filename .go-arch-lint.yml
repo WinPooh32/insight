@@ -12,6 +12,7 @@ components:
   db: { in: cmd/insight/internal/storage/db }
   migrations: { in: cmd/insight/internal/storage/migrations }
   testutil: { in: cmd/insight/internal/testutil }
+  research: { in: cmd/insight/internal/research }
 
 deps:
   main:
@@ -22,6 +23,7 @@ deps:
       - http
       - events
       - db
+      - research
       - migrations
   config:
     mayDependOn:
@@ -38,6 +40,8 @@ deps:
       - http
       - storage
       - events
+      - research
+      - db
       - testutil
   events:
     mayDependOn:
@@ -48,6 +52,12 @@ deps:
   migrations:
     mayDependOn:
       - migrations
+  research:
+    mayDependOn:
+      - research
+      - config
+      - db
+      - testutil
   testutil:
     mayDependOn:
       - testutil

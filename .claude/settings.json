@@ -46,6 +46,15 @@
                         "statusMessage": "Checking for //nolint..."
                     }
                 ]
+            },
+            {
+                "matcher": "Read|Edit|Write|Bash|Grep|Glob",
+                "hooks": [
+                    {
+                        "type": "http",
+                        "url": "http://localhost:8765/hooks/v1/pre-tool-use"
+                    }
+                ]
             }
         ],
         "SessionEnd": [
@@ -158,6 +167,10 @@
                     {
                         "type": "command",
                         "command": "echo \"<system-reminder>Your project knowledge is saved in .claude/skills/research/index.md</system-reminder>\""
+                    },
+                    {
+                        "type": "http",
+                        "url": "http://localhost:8765/hooks/v1/user-prompt-submit"
                     }
                 ]
             }

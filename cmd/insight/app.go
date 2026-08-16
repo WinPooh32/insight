@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/pressly/goose/v3"
@@ -16,6 +17,7 @@ import (
 	"github.com/WinPooh32/insight/cmd/insight/internal/config"
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
 	migrations "github.com/WinPooh32/insight/cmd/insight/internal/storage/migrations"
 )
@@ -44,7 +46,7 @@ func Run(ctx context.Context) error {
 		return fmt.Errorf("run migrations: %w", err)
 	}
 
-	srv, stor, err := createServer(ctx, cfg)
+	srv, stor, indexer, err := createServer(ctx, cfg)
 	if err != nil {
 		return err
 	}
@@ -59,6 +61,10 @@ func Run(ctx context.Context) error {
 
 		if err := srv.Shutdown(shutdownCtx); err != nil {
 			logger.Error("server shutdown error", "error", err)
+		}
+
+		if err := indexer.Close(); err != nil {
+			logger.Error("close research index", "error", err)
 		}
 	}()
 
@@ -92,15 +98,35 @@ func openDatabase(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 	return sdb, nil
 }
 
-func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage.Storage, error) {
+func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage.Storage, *research.Indexer, error) {
 	stor, err := storage.NewSQLiteStorage(ctx, cfg.DBPath(), cfg.Logger)
 	if err != nil {
-		return nil, nil, fmt.Errorf("create storage: %w", err)
+		return nil, nil, nil, fmt.Errorf("create storage: %w", err)
 	}
+
+	queries := stor.Queries()
+	embedder := research.NewEmbedder(cfg.EmbedBaseURL, cfg.EmbedModel, cfg.EmbedAPIKey, queries)
+
+	bleveDir := filepath.Join(cfg.DataDir, "research")
+	if err := os.MkdirAll(bleveDir, dirPerm); err != nil {
+		stor.Close()
+		return nil, nil, nil, fmt.Errorf("create research index dir: %w", err)
+	}
+
+	indexer, err := research.NewIndexer(bleveDir, queries, embedder)
+	if err != nil {
+		stor.Close()
+		return nil, nil, nil, fmt.Errorf("open research index: %w", err)
+	}
+
+	ranker := research.NewRanker(indexer, queries, embedder)
+	filter := events.NewAllowList(cfg.EventFilter)
+	eventHandler := insighthttp.NewEventHandler(stor, filter, cfg.Logger)
+	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, eventHandler, cfg.Logger)
 
 	server := &http.Server{
 		Addr:                         cfg.Addr(),
-		Handler:                      insighthttp.Router(stor, events.NewAllowList(cfg.EventFilter), cfg.Logger),
+		Handler:                      insighthttp.Router(stor, filter, cfg.Logger, injection),
 		ReadHeaderTimeout:            readTimeout,
 		ReadTimeout:                  readTimeout,
 		WriteTimeout:                 writeTimeout,
@@ -117,7 +143,7 @@ func createServer(ctx context.Context, cfg config.Config) (*http.Server, storage
 		Protocols:                    nil,
 	}
 
-	return server, stor, nil
+	return server, stor, indexer, nil
 }
 
 func migrate(ctx context.Context, db *sql.DB, logger *slog.Logger) error {

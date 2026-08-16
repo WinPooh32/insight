@@ -10,6 +10,26 @@ import (
 	"database/sql"
 )
 
+const deleteResearchChunksByEntry = `-- name: DeleteResearchChunksByEntry :exec
+DELETE FROM research_chunks
+WHERE entry = ?
+`
+
+func (q *Queries) DeleteResearchChunksByEntry(ctx context.Context, entry int64) error {
+	_, err := q.db.ExecContext(ctx, deleteResearchChunksByEntry, entry)
+	return err
+}
+
+const deleteResearchEntry = `-- name: DeleteResearchEntry :exec
+DELETE FROM research_entries
+WHERE id = ?
+`
+
+func (q *Queries) DeleteResearchEntry(ctx context.Context, id int64) error {
+	_, err := q.db.ExecContext(ctx, deleteResearchEntry, id)
+	return err
+}
+
 const eventCount = `-- name: EventCount :one
 SELECT count(*) FROM events
 `
@@ -99,6 +119,23 @@ func (q *Queries) EventsByType(ctx context.Context, arg EventsByTypeParams) ([]E
 	return items, nil
 }
 
+const getEmbedCache = `-- name: GetEmbedCache :one
+SELECT sha256, vector, dim, model FROM embed_cache
+WHERE sha256 = ? LIMIT 1
+`
+
+func (q *Queries) GetEmbedCache(ctx context.Context, sha256 string) (EmbedCache, error) {
+	row := q.db.QueryRowContext(ctx, getEmbedCache, sha256)
+	var i EmbedCache
+	err := row.Scan(
+		&i.Sha256,
+		&i.Vector,
+		&i.Dim,
+		&i.Model,
+	)
+	return i, err
+}
+
 const getEvent = `-- name: GetEvent :one
 SELECT id, event_type, received, payload, session_id FROM events
 WHERE id = ? LIMIT 1
@@ -113,6 +150,42 @@ func (q *Queries) GetEvent(ctx context.Context, id string) (Event, error) {
 		&i.Received,
 		&i.Payload,
 		&i.SessionID,
+	)
+	return i, err
+}
+
+const getResearchEntry = `-- name: GetResearchEntry :one
+SELECT id, project, title, path, description, mtime FROM research_entries
+WHERE id = ? LIMIT 1
+`
+
+func (q *Queries) GetResearchEntry(ctx context.Context, id int64) (ResearchEntry, error) {
+	row := q.db.QueryRowContext(ctx, getResearchEntry, id)
+	var i ResearchEntry
+	err := row.Scan(
+		&i.ID,
+		&i.Project,
+		&i.Title,
+		&i.Path,
+		&i.Description,
+		&i.Mtime,
+	)
+	return i, err
+}
+
+const getSessionState = `-- name: GetSessionState :one
+SELECT session_id, transcript_offset, injected_entries, last_prompt FROM session_state
+WHERE session_id = ? LIMIT 1
+`
+
+func (q *Queries) GetSessionState(ctx context.Context, sessionID string) (SessionState, error) {
+	row := q.db.QueryRowContext(ctx, getSessionState, sessionID)
+	var i SessionState
+	err := row.Scan(
+		&i.SessionID,
+		&i.TranscriptOffset,
+		&i.InjectedEntries,
+		&i.LastPrompt,
 	)
 	return i, err
 }
@@ -137,6 +210,32 @@ func (q *Queries) InsertEvent(ctx context.Context, arg InsertEventParams) error 
 		arg.Received,
 		arg.Payload,
 		arg.SessionID,
+	)
+	return err
+}
+
+const insertResearchChunk = `-- name: InsertResearchChunk :exec
+INSERT INTO research_chunks (entry, heading, text, vector, dim, doc_id)
+VALUES (?, ?, ?, ?, ?, ?)
+`
+
+type InsertResearchChunkParams struct {
+	Entry   int64         `json:"entry"`
+	Heading string        `json:"heading"`
+	Text    string        `json:"text"`
+	Vector  []byte        `json:"vector"`
+	Dim     sql.NullInt64 `json:"dim"`
+	DocID   string        `json:"doc_id"`
+}
+
+func (q *Queries) InsertResearchChunk(ctx context.Context, arg InsertResearchChunkParams) error {
+	_, err := q.db.ExecContext(ctx, insertResearchChunk,
+		arg.Entry,
+		arg.Heading,
+		arg.Text,
+		arg.Vector,
+		arg.Dim,
+		arg.DocID,
 	)
 	return err
 }
@@ -180,4 +279,177 @@ func (q *Queries) RecentEvents(ctx context.Context, arg RecentEventsParams) ([]E
 		return nil, err
 	}
 	return items, nil
+}
+
+const researchChunkByDocID = `-- name: ResearchChunkByDocID :one
+SELECT id, entry, heading, text, vector, dim, doc_id FROM research_chunks
+WHERE doc_id = ? LIMIT 1
+`
+
+func (q *Queries) ResearchChunkByDocID(ctx context.Context, docID string) (ResearchChunk, error) {
+	row := q.db.QueryRowContext(ctx, researchChunkByDocID, docID)
+	var i ResearchChunk
+	err := row.Scan(
+		&i.ID,
+		&i.Entry,
+		&i.Heading,
+		&i.Text,
+		&i.Vector,
+		&i.Dim,
+		&i.DocID,
+	)
+	return i, err
+}
+
+const researchChunksByEntry = `-- name: ResearchChunksByEntry :many
+SELECT id, entry, heading, text, vector, dim, doc_id FROM research_chunks
+WHERE entry = ?
+ORDER BY id
+`
+
+func (q *Queries) ResearchChunksByEntry(ctx context.Context, entry int64) ([]ResearchChunk, error) {
+	rows, err := q.db.QueryContext(ctx, researchChunksByEntry, entry)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ResearchChunk{}
+	for rows.Next() {
+		var i ResearchChunk
+		if err := rows.Scan(
+			&i.ID,
+			&i.Entry,
+			&i.Heading,
+			&i.Text,
+			&i.Vector,
+			&i.Dim,
+			&i.DocID,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const researchEntriesByProject = `-- name: ResearchEntriesByProject :many
+SELECT id, project, title, path, description, mtime FROM research_entries
+WHERE project = ?
+ORDER BY path
+`
+
+func (q *Queries) ResearchEntriesByProject(ctx context.Context, project string) ([]ResearchEntry, error) {
+	rows, err := q.db.QueryContext(ctx, researchEntriesByProject, project)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	items := []ResearchEntry{}
+	for rows.Next() {
+		var i ResearchEntry
+		if err := rows.Scan(
+			&i.ID,
+			&i.Project,
+			&i.Title,
+			&i.Path,
+			&i.Description,
+			&i.Mtime,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Close(); err != nil {
+		return nil, err
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const upsertEmbedCache = `-- name: UpsertEmbedCache :exec
+INSERT INTO embed_cache (sha256, vector, dim, model)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (sha256) DO UPDATE SET
+    vector = excluded.vector,
+    dim = excluded.dim,
+    model = excluded.model
+`
+
+type UpsertEmbedCacheParams struct {
+	Sha256 string `json:"sha256"`
+	Vector []byte `json:"vector"`
+	Dim    int64  `json:"dim"`
+	Model  string `json:"model"`
+}
+
+func (q *Queries) UpsertEmbedCache(ctx context.Context, arg UpsertEmbedCacheParams) error {
+	_, err := q.db.ExecContext(ctx, upsertEmbedCache,
+		arg.Sha256,
+		arg.Vector,
+		arg.Dim,
+		arg.Model,
+	)
+	return err
+}
+
+const upsertResearchEntry = `-- name: UpsertResearchEntry :exec
+INSERT INTO research_entries (project, title, path, description, mtime)
+VALUES (?, ?, ?, ?, ?)
+ON CONFLICT (project, path) DO UPDATE SET
+    title = excluded.title,
+    description = excluded.description,
+    mtime = excluded.mtime
+`
+
+type UpsertResearchEntryParams struct {
+	Project     string `json:"project"`
+	Title       string `json:"title"`
+	Path        string `json:"path"`
+	Description string `json:"description"`
+	Mtime       string `json:"mtime"`
+}
+
+func (q *Queries) UpsertResearchEntry(ctx context.Context, arg UpsertResearchEntryParams) error {
+	_, err := q.db.ExecContext(ctx, upsertResearchEntry,
+		arg.Project,
+		arg.Title,
+		arg.Path,
+		arg.Description,
+		arg.Mtime,
+	)
+	return err
+}
+
+const upsertSessionState = `-- name: UpsertSessionState :exec
+INSERT INTO session_state (session_id, transcript_offset, injected_entries, last_prompt)
+VALUES (?, ?, ?, ?)
+ON CONFLICT (session_id) DO UPDATE SET
+    transcript_offset = excluded.transcript_offset,
+    injected_entries = excluded.injected_entries,
+    last_prompt = excluded.last_prompt
+`
+
+type UpsertSessionStateParams struct {
+	SessionID        string `json:"session_id"`
+	TranscriptOffset int64  `json:"transcript_offset"`
+	InjectedEntries  string `json:"injected_entries"`
+	LastPrompt       string `json:"last_prompt"`
+}
+
+func (q *Queries) UpsertSessionState(ctx context.Context, arg UpsertSessionStateParams) error {
+	_, err := q.db.ExecContext(ctx, upsertSessionState,
+		arg.SessionID,
+		arg.TranscriptOffset,
+		arg.InjectedEntries,
+		arg.LastPrompt,
+	)
+	return err
 }

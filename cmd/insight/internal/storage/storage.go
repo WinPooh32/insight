@@ -57,6 +57,12 @@ func NewSQLiteStorage(ctx context.Context, dbPath string, logger *slog.Logger) (
 		return nil, fmt.Errorf("set journal mode: %w", err)
 	}
 
+	// Enforce foreign keys so ON DELETE CASCADE in migrations works.
+	if _, err := sdb.ExecContext(ctx, "PRAGMA foreign_keys=ON"); err != nil {
+		sdb.Close()
+		return nil, fmt.Errorf("enable foreign keys: %w", err)
+	}
+
 	// Run goose migrations from embedded SQL files.
 	goose.SetBaseFS(migrations.Embed)
 
@@ -176,6 +182,14 @@ func (s *SQLiteStorage) Count(ctx context.Context) (int64, error) {
 	}
 
 	return count, nil
+}
+
+// Queries returns the sqlc queries backed by the storage's pool.
+// Consumers that need the same database (e.g. the research embedder)
+// must use this instead of opening a second pool on the same file,
+// which risks SQLITE_BUSY against the single-writer connection.
+func (s *SQLiteStorage) Queries() *db.Queries {
+	return s.q
 }
 
 // Close closes the SQLite database connection.

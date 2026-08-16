@@ -72,7 +72,7 @@ func NewTestRouter(tb testing.TB) http.Handler {
 
 	storageInst := NewTestStorage(tb)
 
-	return insighthttp.Router(storageInst, nil, slog.New(slog.DiscardHandler))
+	return insighthttp.Router(storageInst, nil, slog.New(slog.DiscardHandler), nil)
 }
 
 // NewTestRouterWithLog creates an HTTP router and captures logs.
@@ -82,7 +82,7 @@ func NewTestRouterWithLog(tb testing.TB, logBuf *bytes.Buffer) http.Handler {
 
 	storageInst := NewTestStorageWithLog(tb, logBuf)
 
-	return insighthttp.Router(storageInst, nil, slog.New(slog.NewTextHandler(logBuf, nil)))
+	return insighthttp.Router(storageInst, nil, slog.New(slog.NewTextHandler(logBuf, nil)), nil)
 }
 
 // NewTestRouterWithFilter creates an HTTP router with a custom event filter.
@@ -92,7 +92,7 @@ func NewTestRouterWithFilter(tb testing.TB, filter []string) http.Handler {
 	storageInst := NewTestStorage(tb)
 	allowList := events.NewAllowList(filter)
 
-	return insighthttp.Router(storageInst, allowList, slog.New(slog.DiscardHandler))
+	return insighthttp.Router(storageInst, allowList, slog.New(slog.DiscardHandler), nil)
 }
 
 // NewTestServer creates an httptest.Server from a router and registers cleanup.
