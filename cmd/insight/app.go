@@ -24,9 +24,9 @@ import (
 
 const (
 	dirPerm         = 0o755
-	readTimeout     = 10 * time.Second
-	writeTimeout    = 10 * time.Second
-	idleTimeout     = 60 * time.Second
+	readTimeout     = 115 * time.Second
+	writeTimeout    = 115 * time.Second
+	idleTimeout     = 160 * time.Second
 	shutdownTimeout = 5 * time.Second
 	maxHeaderBytes  = 4096
 )

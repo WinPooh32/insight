@@ -52,7 +52,8 @@
                 "hooks": [
                     {
                         "type": "http",
-                        "url": "http://localhost:8765/hooks/v1/pre-tool-use"
+                        "url": "http://localhost:8765/hooks/v1/pre-tool-use",
+                        "timeout": 120
                     }
                 ]
             }
@@ -170,7 +171,8 @@
                     },
                     {
                         "type": "http",
-                        "url": "http://localhost:8765/hooks/v1/user-prompt-submit"
+                        "url": "http://localhost:8765/hooks/v1/user-prompt-submit",
+                        "timeout": 120
                     }
                 ]
             }

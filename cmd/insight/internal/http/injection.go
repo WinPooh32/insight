@@ -18,7 +18,7 @@ import (
 
 // injectionDeadline bounds the whole injection phase. The hook must
 // fit Claude Code's 30 s budget, so this sits below it.
-const injectionDeadline = 25 * time.Second
+const injectionDeadline = 110 * time.Second
 
 // contextHeader introduces the injected research links in the
 // additionalContext message.
