@@ -1,23 +1,21 @@
-// Package research implements research-link injection: an embedding
-// client with a content-hash cache, corpus indexing, transcript
-// parsing, and relevance ranking.
-package research
+// Package embed implements the embedding client with a content-hash
+// cache.
+package embed
 
 import (
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"database/sql"
-	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
-	"math"
 	"net/http"
 	"time"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/vec"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 )
 
@@ -28,9 +26,6 @@ const (
 
 	// errBodyLimit caps error body text included in API errors.
 	errBodyLimit = 512
-
-	// float32Size is the size of one float32 in the cache BLOB.
-	float32Size = 4
 )
 
 // CacheQueries is the subset of db.Queries the embedder needs to
@@ -82,24 +77,29 @@ func (e *Embedder) Embed(ctx context.Context, text string) ([]float32, error) {
 	}
 
 	if err == nil && row.Model == e.model {
-		return decodeVector(row.Vector)
+		v, err := vec.Decode(row.Vector)
+		if err != nil {
+			return nil, fmt.Errorf("decode embed cache vector: %w", err)
+		}
+
+		return v, nil
 	}
 
-	vec, err := e.callAPI(ctx, text)
+	v, err := e.callAPI(ctx, text)
 	if err != nil {
 		return nil, err
 	}
 
 	if err := e.cache.UpsertEmbedCache(ctx, db.UpsertEmbedCacheParams{
 		Sha256: key,
-		Vector: encodeVector(vec),
-		Dim:    int64(len(vec)),
+		Vector: vec.Encode(v),
+		Dim:    int64(len(v)),
 		Model:  e.model,
 	}); err != nil {
 		return nil, fmt.Errorf("upsert embed cache: %w", err)
 	}
 
-	return vec, nil
+	return v, nil
 }
 
 // callAPI posts the text to {baseURL}/embeddings and returns the
@@ -156,28 +156,4 @@ func sha256Text(text string) string {
 	sum := sha256.Sum256([]byte(text))
 
 	return hex.EncodeToString(sum[:])
-}
-
-// encodeVector serializes a float32 vector to little-endian bytes.
-func encodeVector(vec []float32) []byte {
-	buf := make([]byte, float32Size*len(vec))
-	for i, v := range vec {
-		binary.LittleEndian.PutUint32(buf[float32Size*i:], math.Float32bits(v))
-	}
-
-	return buf
-}
-
-// decodeVector reverses encodeVector.
-func decodeVector(buf []byte) ([]float32, error) {
-	if len(buf)%float32Size != 0 {
-		return nil, fmt.Errorf("vector blob of %d bytes is not a multiple of %d", len(buf), float32Size)
-	}
-
-	vec := make([]float32, len(buf)/float32Size)
-	for i := range vec {
-		vec[i] = math.Float32frombits(binary.LittleEndian.Uint32(buf[float32Size*i:]))
-	}
-
-	return vec, nil
 }

@@ -1,4 +1,4 @@
-package research_test
+package transcript_test
 
 import (
 	"context"
@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/transcript"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -51,7 +51,7 @@ func appendTranscript(t *testing.T, path, data string) {
 	}
 }
 
-func delta(t *testing.T, tr *research.Transcript, sessionID string) string {
+func delta(t *testing.T, tr *transcript.Transcript, sessionID string) string {
 	t.Helper()
 
 	text, err := tr.Delta(context.Background(), sessionID)
@@ -68,7 +68,7 @@ func TestTranscriptDelta(t *testing.T) {
 	path := writeTranscript(t, fixtureAssistant, fixtureUser)
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(path, storageInst.Queries())
+	tr := transcript.NewTranscript(path, storageInst.Queries())
 
 	// First read: all assistant prose (thinking + text), block order.
 	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
@@ -94,7 +94,7 @@ func TestTranscriptShrinkResetsOffset(t *testing.T) {
 	path := writeTranscript(t, fixtureAssistant, fixtureUser, fixtureThinking, fixtureMixed)
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(path, storageInst.Queries())
+	tr := transcript.NewTranscript(path, storageInst.Queries())
 
 	if got := delta(t, tr, "s1"); got != "secret-thoughthelloinner-monoworldagain" {
 		t.Fatalf("first delta = %q, want %q", got, "secret-thoughthelloinner-monoworldagain")
@@ -116,7 +116,7 @@ func TestTranscriptPartialTrailingLine(t *testing.T) {
 	path := writeTranscript(t, fixtureAssistant)
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(path, storageInst.Queries())
+	tr := transcript.NewTranscript(path, storageInst.Queries())
 
 	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
 		t.Fatalf("first delta = %q, want %q", got, "secret-thoughthello")
@@ -168,7 +168,7 @@ func TestTranscriptPreservesInjectedEntries(t *testing.T) {
 		t.Fatalf("seed session state: %v", err)
 	}
 
-	tr := research.NewTranscript(path, queries)
+	tr := transcript.NewTranscript(path, queries)
 
 	if got := delta(t, tr, "s1"); got != "secret-thoughthello" {
 		t.Fatalf("delta = %q, want %q", got, "secret-thoughthello")
@@ -192,7 +192,7 @@ func TestTranscriptMissingFile(t *testing.T) {
 	t.Parallel()
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(filepath.Join(t.TempDir(), "absent.jsonl"), storageInst.Queries())
+	tr := transcript.NewTranscript(filepath.Join(t.TempDir(), "absent.jsonl"), storageInst.Queries())
 
 	if _, err := tr.Delta(context.Background(), "s1"); err == nil {
 		t.Error("expected error for missing transcript file")
@@ -211,7 +211,7 @@ func TestTranscriptDeltaCapsLongBlocks(t *testing.T) {
 	)
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(path, storageInst.Queries())
+	tr := transcript.NewTranscript(path, storageInst.Queries())
 
 	check := func(got, block string) {
 		t.Helper()
@@ -266,7 +266,7 @@ func TestTranscriptDeltaSkipsRedactedThinking(t *testing.T) {
 	)
 
 	storageInst := testutil.NewTestStorage(t)
-	tr := research.NewTranscript(path, storageInst.Queries())
+	tr := transcript.NewTranscript(path, storageInst.Queries())
 
 	if got := delta(t, tr, "s1"); got != "visible" {
 		t.Errorf("delta = %q, want %q", got, "visible")

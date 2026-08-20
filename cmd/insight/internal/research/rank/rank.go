@@ -1,4 +1,4 @@
-package research
+package rank
 
 import (
 	"context"
@@ -13,6 +13,7 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/search/query"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/vec"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 )
 
@@ -43,15 +44,21 @@ type RankedEntry struct {
 	Score       float64
 }
 
-// Searcher searches a Bleve index. *Indexer satisfies it.
+// Searcher searches a Bleve index. *index.Indexer satisfies it.
 type Searcher interface {
 	Search(req *bleve.SearchRequest) (*bleve.SearchResult, error)
 }
 
-// RankQueries is the subset of db.Queries the ranker needs to load
+// Embedding produces float32 vectors for text. *embed.Embedder
+// satisfies it structurally.
+type Embedding interface {
+	Embed(ctx context.Context, text string) ([]float32, error)
+}
+
+// Queries is the subset of db.Queries the ranker needs to load
 // candidate vectors, entry rows and the per-session injected set.
 // *db.Queries satisfies it structurally.
-type RankQueries interface {
+type Queries interface {
 	ResearchChunkByDocID(ctx context.Context, docID string) (db.ResearchChunk, error)
 	ResearchEntriesByProject(ctx context.Context, project string) ([]db.ResearchEntry, error)
 	GetSessionState(ctx context.Context, sessionID string) (db.SessionState, error)
@@ -63,14 +70,14 @@ type RankQueries interface {
 // top 3, per-session dedup.
 type Ranker struct {
 	search Searcher
-	q      RankQueries
+	q      Queries
 	embed  Embedding
 }
 
 // NewRanker creates a Ranker over the searcher's Bleve index,
 // persisting per-session state through q and embedding segments via
-// embed (a caching *Embedder keeps repeats free).
-func NewRanker(search Searcher, q RankQueries, embed Embedding) *Ranker {
+// embed (a caching *embed.Embedder keeps repeats free).
+func NewRanker(search Searcher, q Queries, embed Embedding) *Ranker {
 	return &Ranker{search: search, q: q, embed: embed}
 }
 
@@ -192,7 +199,7 @@ func (r *Ranker) scoreEntries(ctx context.Context, docIDs []string, segVecs [][]
 			return nil, fmt.Errorf("load chunk %s: %w", id, err)
 		}
 
-		vec, err := decodeVector(chunk.Vector)
+		vec, err := vec.Decode(chunk.Vector)
 		if err != nil {
 			return nil, fmt.Errorf("decode chunk %s vector: %w", id, err)
 		}

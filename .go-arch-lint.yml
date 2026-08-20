@@ -12,7 +12,7 @@ components:
   http: { in: cmd/insight/internal/http }
   events: { in: cmd/insight/internal/events }
   testutil: { in: cmd/insight/internal/testutil }
-  research: { in: cmd/insight/internal/research }
+  research: { in: [cmd/insight/internal/research, cmd/insight/internal/research/**] }
 
 deps:
   main:
@@ -30,6 +30,7 @@ deps:
       - research
   research:
     mayDependOn:
+      - research
       - storage
   testutil:
     mayDependOn:

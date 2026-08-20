@@ -16,7 +16,10 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/config"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/embed"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/transcript"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
 	migrations "github.com/WinPooh32/insight/cmd/insight/internal/storage/migrations"
 )
@@ -99,14 +102,14 @@ func openDatabase(ctx context.Context, cfg config.Config) (*sql.DB, error) {
 
 func createServer(
 	ctx context.Context, cfg config.Config,
-) (*http.Server, *storage.SQLiteStorage, *research.Indexer, error) {
+) (*http.Server, *storage.SQLiteStorage, *index.Indexer, error) {
 	stor, err := storage.NewSQLiteStorage(ctx, cfg.DBPath(), cfg.Logger)
 	if err != nil {
 		return nil, nil, nil, fmt.Errorf("create storage: %w", err)
 	}
 
 	queries := stor.Queries()
-	embedder := research.NewEmbedder(cfg.EmbedBaseURL, cfg.EmbedModel, cfg.EmbedAPIKey, queries)
+	embedder := embed.NewEmbedder(cfg.EmbedBaseURL, cfg.EmbedModel, cfg.EmbedAPIKey, queries)
 
 	bleveDir := filepath.Join(cfg.DataDir, "research")
 	if err := os.MkdirAll(bleveDir, dirPerm); err != nil {
@@ -114,14 +117,14 @@ func createServer(
 		return nil, nil, nil, fmt.Errorf("create research index dir: %w", err)
 	}
 
-	indexer, err := research.NewIndexer(bleveDir, queries, embedder)
+	indexer, err := index.NewIndexer(bleveDir, queries, embedder)
 	if err != nil {
 		stor.Close()
 		return nil, nil, nil, fmt.Errorf("open research index: %w", err)
 	}
 
-	ranker := research.NewRanker(indexer, queries, embedder)
-	injection := insighthttp.NewInjectionHandler(indexer, ranker, research.NewSessionStore(queries), cfg.Logger)
+	ranker := rank.NewRanker(indexer, queries, embedder)
+	injection := insighthttp.NewInjectionHandler(indexer, ranker, transcript.NewSessionStore(queries), cfg.Logger)
 
 	server := &http.Server{
 		Addr:                         cfg.Addr(),

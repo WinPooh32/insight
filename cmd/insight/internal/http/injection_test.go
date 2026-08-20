@@ -16,7 +16,8 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -87,14 +88,14 @@ type injectionFixture struct {
 	queries *db.Queries
 }
 
-func newInjectionFixture(t *testing.T, index string, docs map[string]string, emb research.Embedding) *injectionFixture {
+func newInjectionFixture(t *testing.T, indexMd string, docs map[string]string, emb index.Embedding) *injectionFixture {
 	t.Helper()
 
 	storage := testutil.NewTestStorage(t)
 	queries := storage.Queries()
-	cwd := writeCorpus(t, index, docs)
+	cwd := writeCorpus(t, indexMd, docs)
 
-	indexer, err := research.NewIndexer(t.TempDir(), queries, emb)
+	indexer, err := index.NewIndexer(t.TempDir(), queries, emb)
 	if err != nil {
 		t.Fatalf("new indexer: %v", err)
 	}
@@ -102,7 +103,7 @@ func newInjectionFixture(t *testing.T, index string, docs map[string]string, emb
 	t.Cleanup(func() { indexer.Close() })
 
 	logger := slog.New(slog.DiscardHandler)
-	ranker := research.NewRanker(indexer, queries, emb)
+	ranker := rank.NewRanker(indexer, queries, emb)
 	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, logger)
 	router := insighthttp.Router(injection)
 

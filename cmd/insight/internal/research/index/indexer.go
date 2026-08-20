@@ -1,4 +1,4 @@
-package research
+package index
 
 import (
 	"context"
@@ -14,13 +14,14 @@ import (
 	"github.com/blevesearch/bleve/v2"
 	"github.com/blevesearch/bleve/v2/mapping"
 
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/vec"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 )
 
-// IndexQueries is the subset of db.Queries the corpus indexer needs
+// Queries is the subset of db.Queries the corpus indexer needs
 // to persist entry and chunk rows. *db.Queries satisfies it
 // structurally.
-type IndexQueries interface {
+type Queries interface {
 	UpsertResearchEntry(ctx context.Context, arg db.UpsertResearchEntryParams) error
 	ResearchEntriesByProject(ctx context.Context, project string) ([]db.ResearchEntry, error)
 	DeleteResearchEntry(ctx context.Context, id int64) error
@@ -29,8 +30,8 @@ type IndexQueries interface {
 	ResearchChunksByEntry(ctx context.Context, entry int64) ([]db.ResearchChunk, error)
 }
 
-// Embedding produces float32 vectors for text. *Embedder satisfies
-// it structurally.
+// Embedding produces float32 vectors for text. *embed.Embedder
+// satisfies it structurally.
 type Embedding interface {
 	Embed(ctx context.Context, text string) ([]float32, error)
 }
@@ -40,13 +41,13 @@ type Embedding interface {
 // Bleve index stays open across Index calls.
 type Indexer struct {
 	idx   bleve.Index
-	q     IndexQueries
+	q     Queries
 	embed Embedding
 }
 
 // NewIndexer opens (or creates) the Bleve index at bleveDir and
 // returns an Indexer persisting through q with vectors from embed.
-func NewIndexer(bleveDir string, q IndexQueries, embed Embedding) (*Indexer, error) {
+func NewIndexer(bleveDir string, q Queries, embed Embedding) (*Indexer, error) {
 	idx, err := bleve.Open(bleveDir)
 	if errors.Is(err, bleve.ErrorIndexPathDoesNotExist) ||
 		errors.Is(err, bleve.ErrorIndexMetaMissing) {
@@ -298,7 +299,7 @@ func (i *Indexer) writeSections(ctx context.Context, project string,
 			Entry:   id,
 			Heading: s.heading,
 			Text:    s.body,
-			Vector:  encodeVector(vecs[n]),
+			Vector:  vec.Encode(vecs[n]),
 			Dim:     sql.NullInt64{Int64: int64(len(vecs[n])), Valid: true},
 			DocID:   sectionDocID(project, e.path, n),
 		}); err != nil {
@@ -318,7 +319,7 @@ func (i *Indexer) writeSections(ctx context.Context, project string,
 		Entry:   id,
 		Heading: "",
 		Text:    entryChunkText(e),
-		Vector:  encodeVector(entryVec),
+		Vector:  vec.Encode(entryVec),
 		Dim:     sql.NullInt64{Int64: int64(len(entryVec)), Valid: true},
 		DocID:   entryDocID(project, e.path),
 	}); err != nil {

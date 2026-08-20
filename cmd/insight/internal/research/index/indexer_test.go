@@ -1,4 +1,4 @@
-package research_test
+package index_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 
 	"github.com/blevesearch/bleve/v2"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -85,12 +85,12 @@ func writeCorpus(t *testing.T, index string, docs map[string]string) string {
 	return cwd
 }
 
-func newTestIndexer(t *testing.T, embed research.Embedding) (*research.Indexer, *db.Queries) {
+func newTestIndexer(t *testing.T, embed index.Embedding) (*index.Indexer, *db.Queries) {
 	t.Helper()
 
 	queries := testutil.NewTestStorage(t).Queries()
 
-	idx, err := research.NewIndexer(t.TempDir(), queries, embed)
+	idx, err := index.NewIndexer(t.TempDir(), queries, embed)
 	if err != nil {
 		t.Fatalf("new indexer: %v", err)
 	}
@@ -102,7 +102,7 @@ func newTestIndexer(t *testing.T, embed research.Embedding) (*research.Indexer, 
 
 // searchDocIDs returns the IDs of the docs in project matching the
 // query word.
-func searchDocIDs(t *testing.T, idx *research.Indexer, project, query string) []string {
+func searchDocIDs(t *testing.T, idx *index.Indexer, project, query string) []string {
 	t.Helper()
 
 	tq := bleve.NewTermQuery(project)
@@ -489,7 +489,7 @@ func TestIndexEmbedFailure(t *testing.T) {
 
 	storageInst := testutil.NewTestStorage(t)
 
-	failing, err := research.NewIndexer(t.TempDir(), storageInst.Queries(), failingEmbedder{})
+	failing, err := index.NewIndexer(t.TempDir(), storageInst.Queries(), failingEmbedder{})
 	if err != nil {
 		t.Fatalf("new indexer: %v", err)
 	}
@@ -512,7 +512,7 @@ func TestIndexEmbedFailure(t *testing.T) {
 
 	working := &fakeEmbedder{calls: 0}
 
-	idx, err := research.NewIndexer(t.TempDir(), storageInst.Queries(), working)
+	idx, err := index.NewIndexer(t.TempDir(), storageInst.Queries(), working)
 	if err != nil {
 		t.Fatalf("new indexer: %v", err)
 	}

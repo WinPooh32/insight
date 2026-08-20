@@ -1,4 +1,4 @@
-package research_test
+package rank_test
 
 import (
 	"context"
@@ -6,10 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -34,21 +37,53 @@ func (m *mapEmbedder) Embed(_ context.Context, text string) ([]float32, error) {
 	return m.def, nil
 }
 
+// writeCorpus creates a temp cwd with the index.md content ("" = no
+// file) and the given docs, and returns the cwd.
+func writeCorpus(t *testing.T, index string, docs map[string]string) string {
+	t.Helper()
+
+	cwd := t.TempDir()
+
+	if index != "" {
+		dir := filepath.Join(cwd, ".claude", "skills", "research")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatalf("mkdir research dir: %v", err)
+		}
+
+		if err := os.WriteFile(filepath.Join(dir, "index.md"), []byte(index), 0o600); err != nil {
+			t.Fatalf("write index.md: %v", err)
+		}
+	}
+
+	for path, content := range docs {
+		full := filepath.Join(cwd, path)
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", path, err)
+		}
+
+		if err := os.WriteFile(full, []byte(content), 0o600); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
+
+	return cwd
+}
+
 // newRankFixture indexes the corpus into a real Bleve index and a
 // temp DB, and returns a Ranker over it plus the queries for
 // assertions.
-func newRankFixture(t *testing.T, index string, docs map[string]string,
+func newRankFixture(t *testing.T, indexMd string, docs map[string]string,
 	emb *mapEmbedder,
-) (*research.Ranker, *db.Queries) {
+) (*rank.Ranker, *db.Queries) {
 	t.Helper()
 
 	ctx := context.Background()
 
-	cwd := writeCorpus(t, index, docs)
+	cwd := writeCorpus(t, indexMd, docs)
 
 	queries := testutil.NewTestStorage(t).Queries()
 
-	idx, err := research.NewIndexer(t.TempDir(), queries, emb)
+	idx, err := index.NewIndexer(t.TempDir(), queries, emb)
 	if err != nil {
 		t.Fatalf("new indexer: %v", err)
 	}
@@ -59,11 +94,11 @@ func newRankFixture(t *testing.T, index string, docs map[string]string,
 		t.Fatalf("index: %v", err)
 	}
 
-	return research.NewRanker(idx, queries, emb), queries
+	return rank.NewRanker(idx, queries, emb), queries
 }
 
 // rankPaths returns the returned entry paths in order.
-func rankPaths(t *testing.T, r *research.Ranker, session string, segments ...string) []string {
+func rankPaths(t *testing.T, r *rank.Ranker, session string, segments ...string) []string {
 	t.Helper()
 
 	got, err := r.Rank(context.Background(), "proj", session, segments)

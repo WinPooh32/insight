@@ -1,4 +1,4 @@
-package research
+package index
 
 import (
 	"strings"

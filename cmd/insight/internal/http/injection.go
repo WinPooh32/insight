@@ -12,7 +12,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/transcript"
 )
 
 // injectionDeadline bounds the whole injection phase. The hook must
@@ -36,16 +38,16 @@ const (
 // It offers the top relevant research entries as additionalContext.
 // Every failure mode degrades to a 200 with an empty body.
 type InjectionHandler struct {
-	indexer *research.Indexer
-	ranker  *research.Ranker
-	session research.SessionQueries
+	indexer *index.Indexer
+	ranker  *rank.Ranker
+	session transcript.SessionQueries
 	log     *slog.Logger
 }
 
 // NewInjectionHandler creates an InjectionHandler. session must share
 // the storage's database pool (e.g. SQLiteStorage.Queries()).
 func NewInjectionHandler(
-	indexer *research.Indexer, ranker *research.Ranker, session research.SessionQueries, logger *slog.Logger,
+	indexer *index.Indexer, ranker *rank.Ranker, session transcript.SessionQueries, logger *slog.Logger,
 ) *InjectionHandler {
 	return &InjectionHandler{
 		indexer: indexer,
@@ -149,7 +151,7 @@ func (h *InjectionHandler) ptuSegments(ctx context.Context, p ptuPayload) []stri
 		segments = append(segments, last)
 	}
 
-	delta, err := research.NewTranscript(p.TranscriptPath, h.session).Delta(ctx, p.SessionID)
+	delta, err := transcript.NewTranscript(p.TranscriptPath, h.session).Delta(ctx, p.SessionID)
 	if err != nil {
 		h.log.WarnContext(ctx, "read transcript delta", "error", err)
 	} else if delta != "" {
@@ -185,7 +187,7 @@ func (h *InjectionHandler) lastPrompt(ctx context.Context, sessionID string) str
 // persistLastPrompt stores the last prompt for sessionID, preserving
 // the transcript offset and injected entries.
 func (h *InjectionHandler) persistLastPrompt(ctx context.Context, sessionID, prompt string) {
-	if err := research.PersistLastPrompt(ctx, h.session, sessionID, prompt); err != nil {
+	if err := transcript.PersistLastPrompt(ctx, h.session, sessionID, prompt); err != nil {
 		h.log.WarnContext(ctx, "persist last prompt", "error", err)
 	}
 }

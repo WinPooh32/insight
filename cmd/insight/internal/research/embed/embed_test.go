@@ -1,4 +1,4 @@
-package research_test
+package embed_test
 
 import (
 	"bytes"
@@ -12,7 +12,7 @@ import (
 	"sync/atomic"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/research"
+	"github.com/WinPooh32/insight/cmd/insight/internal/research/embed"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
 )
@@ -82,7 +82,7 @@ func TestEmbedCacheHit(t *testing.T) {
 	server := newFakeEmbedServer(t, &hits, &auths)
 
 	storageInst := testutil.NewTestStorage(t)
-	embedder := research.NewEmbedder(server.URL, "a", "", storageInst.Queries())
+	embedder := embed.NewEmbedder(server.URL, "a", "", storageInst.Queries())
 
 	first, err := embedder.Embed(ctx, "hello")
 	if err != nil {
@@ -123,7 +123,7 @@ func TestEmbedDistinctTexts(t *testing.T) {
 	server := newFakeEmbedServer(t, &hits, &auths)
 
 	storageInst := testutil.NewTestStorage(t)
-	embedder := research.NewEmbedder(server.URL, "a", "key-1", storageInst.Queries())
+	embedder := embed.NewEmbedder(server.URL, "a", "key-1", storageInst.Queries())
 
 	for _, text := range []string{"alpha", "beta"} {
 		if _, err := embedder.Embed(ctx, text); err != nil {
@@ -157,7 +157,7 @@ func TestEmbedModelChange(t *testing.T) {
 
 	storageInst := testutil.NewTestStorage(t)
 
-	a := research.NewEmbedder(server.URL, "a", "", storageInst.Queries())
+	a := embed.NewEmbedder(server.URL, "a", "", storageInst.Queries())
 
 	va, err := a.Embed(ctx, "hello")
 	if err != nil {
@@ -165,7 +165,7 @@ func TestEmbedModelChange(t *testing.T) {
 	}
 
 	// A different model must not reuse the cached row.
-	b := research.NewEmbedder(server.URL, "b", "", storageInst.Queries())
+	b := embed.NewEmbedder(server.URL, "b", "", storageInst.Queries())
 
 	vb, err := b.Embed(ctx, "hello")
 	if err != nil {
@@ -201,7 +201,7 @@ func TestEmbedServerDown(t *testing.T) {
 	ctx := context.Background()
 
 	storageInst := testutil.NewTestStorage(t)
-	embedder := research.NewEmbedder("http://127.0.0.1:1", "a", "", storageInst.Queries())
+	embedder := embed.NewEmbedder("http://127.0.0.1:1", "a", "", storageInst.Queries())
 
 	vec, err := embedder.Embed(ctx, "hello")
 	if err == nil {
@@ -237,7 +237,7 @@ func TestEmbedAPIError(t *testing.T) {
 			}))
 			t.Cleanup(server.Close)
 
-			embedder := research.NewEmbedder(server.URL, "a", "", storageInst.Queries())
+			embedder := embed.NewEmbedder(server.URL, "a", "", storageInst.Queries())
 			if _, err := embedder.Embed(ctx, "hello"); err == nil {
 				t.Errorf("expected error for %s", name)
 			}
@@ -262,7 +262,7 @@ func TestEmbedCacheCorrupt(t *testing.T) {
 		t.Fatalf("upsert corrupt row: %v", err)
 	}
 
-	embedder := research.NewEmbedder("http://127.0.0.1:1", "a", "", storageInst.Queries())
+	embedder := embed.NewEmbedder("http://127.0.0.1:1", "a", "", storageInst.Queries())
 	if _, err := embedder.Embed(ctx, "corrupt"); err == nil {
 		t.Error("expected error for corrupt cache row")
 	}
@@ -281,7 +281,7 @@ func TestVectorRoundTrip(t *testing.T) {
 	)
 
 	server := newFakeEmbedServer(t, &hits, &auths)
-	embedder := research.NewEmbedder(server.URL, "a", "", storageInst.Queries())
+	embedder := embed.NewEmbedder(server.URL, "a", "", storageInst.Queries())
 
 	// The fake returns [1 2 3] for model "a".
 	vec, err := embedder.Embed(ctx, "hello")
@@ -311,7 +311,7 @@ func TestVectorRoundTrip(t *testing.T) {
 
 	// A fresh embedder must decode the same BLOB bit-identically
 	// (cache hit, no new request).
-	again := research.NewEmbedder(server.URL, "a", "", storageInst.Queries())
+	again := embed.NewEmbedder(server.URL, "a", "", storageInst.Queries())
 
 	got, err := again.Embed(ctx, "hello")
 	if err != nil {
