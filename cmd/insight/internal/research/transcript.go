@@ -22,6 +22,31 @@ type SessionQueries interface {
 	UpsertSessionState(ctx context.Context, arg db.UpsertSessionStateParams) error
 }
 
+// SessionStore adapts *db.Queries to SessionQueries so layers that must
+// not import the db package (e.g. the http handler) can persist session
+// state. It keeps the concrete db type out of those layers.
+type SessionStore struct{ q *db.Queries }
+
+// NewSessionStore wraps q for use as a SessionQueries.
+func NewSessionStore(q *db.Queries) *SessionStore { return &SessionStore{q: q} }
+
+func (s *SessionStore) GetSessionState(ctx context.Context, sessionID string) (db.SessionState, error) {
+	state, err := s.q.GetSessionState(ctx, sessionID)
+	if err != nil {
+		return db.SessionState{}, fmt.Errorf("get session state: %w", err)
+	}
+
+	return state, nil
+}
+
+func (s *SessionStore) UpsertSessionState(ctx context.Context, arg db.UpsertSessionStateParams) error {
+	if err := s.q.UpsertSessionState(ctx, arg); err != nil {
+		return fmt.Errorf("upsert session state: %w", err)
+	}
+
+	return nil
+}
+
 // Transcript delta-parses a Claude Code JSONL transcript. Each session
 // keeps a byte offset in session_state, so Delta only reads the lines
 // appended since the previous call. Main transcript only; subagent
@@ -36,6 +61,28 @@ type Transcript struct {
 // database pool.
 func NewTranscript(path string, session SessionQueries) *Transcript {
 	return &Transcript{path: path, session: session}
+}
+
+// PersistLastPrompt stores the last prompt for sessionID, preserving
+// the transcript offset and injected entries. It seeds a fresh row
+// when the session has none.
+func PersistLastPrompt(ctx context.Context, session SessionQueries, sessionID, prompt string) error {
+	state, err := session.GetSessionState(ctx, sessionID)
+	if errors.Is(err, sql.ErrNoRows) {
+		// Seed a valid injected set so the ranker's dedup can parse
+		// the row on the same request.
+		state = db.SessionState{SessionID: sessionID, TranscriptOffset: 0, InjectedEntries: "[]", LastPrompt: ""}
+	} else if err != nil {
+		return fmt.Errorf("load session state: %w", err)
+	}
+
+	state.LastPrompt = prompt
+
+	if err := session.UpsertSessionState(ctx, db.UpsertSessionStateParams(state)); err != nil {
+		return fmt.Errorf("save session state: %w", err)
+	}
+
+	return nil
 }
 
 // proseCapTokens is the approximate token budget kept from each end

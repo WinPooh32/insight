@@ -13,7 +13,6 @@ import (
 	"time"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/research"
-	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
 )
 
 // injectionDeadline bounds the whole injection phase. The hook must
@@ -186,19 +185,7 @@ func (h *InjectionHandler) lastPrompt(ctx context.Context, sessionID string) str
 // persistLastPrompt stores the last prompt for sessionID, preserving
 // the transcript offset and injected entries.
 func (h *InjectionHandler) persistLastPrompt(ctx context.Context, sessionID, prompt string) {
-	state, err := h.session.GetSessionState(ctx, sessionID)
-	if errors.Is(err, sql.ErrNoRows) {
-		// Seed a valid injected set so the ranker's dedup can parse
-		// the row on the same request.
-		state = db.SessionState{SessionID: sessionID, TranscriptOffset: 0, InjectedEntries: "[]", LastPrompt: ""}
-	} else if err != nil {
-		h.log.WarnContext(ctx, "get session state", "error", err)
-		return
-	}
-
-	state.LastPrompt = prompt
-
-	if err := h.session.UpsertSessionState(ctx, db.UpsertSessionStateParams(state)); err != nil {
+	if err := research.PersistLastPrompt(ctx, h.session, sessionID, prompt); err != nil {
 		h.log.WarnContext(ctx, "persist last prompt", "error", err)
 	}
 }

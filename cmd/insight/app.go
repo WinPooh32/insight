@@ -121,7 +121,7 @@ func createServer(
 	}
 
 	ranker := research.NewRanker(indexer, queries, embedder)
-	injection := insighthttp.NewInjectionHandler(indexer, ranker, queries, cfg.Logger)
+	injection := insighthttp.NewInjectionHandler(indexer, ranker, research.NewSessionStore(queries), cfg.Logger)
 
 	server := &http.Server{
 		Addr:                         cfg.Addr(),
