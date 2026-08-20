@@ -1,16 +1,16 @@
 -include .env
 
-.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight issue/prime issue/ready issue/claim issue/create issue/create-child issue/show issue/close issue/search
+.PHONY: help lint lint/ci lint/go lint/typos lint/md lint/arch lint/bd lint/untested lint/scc fmt fmt/go fmt/golangci-lint fmt/md run/mcp-gopls run/mcp-searxng run/mcp-lightpanda run/lightpanda/fetch run/lightpanda/serve install/tools test test/unit test/all test/mutesting test/mutest-pkg test/mutest-clear test/coverage gen/insight-storage run/insight build/insight stats/scc issue/prime issue/ready issue/claim issue/create issue/create-child issue/show issue/close issue/search
 
 ## Show available targets
 help:
 	@grep -E '^[a-zA-Z_/-]+:.*## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-15s\033[0m %s\n", $$1, $$2}'
 
 ## Run all linters
-lint: lint/go lint/typos lint/md lint/arch lint/bd lint/untested
+lint: lint/go lint/typos lint/md lint/arch lint/bd lint/untested lint/scc
 
 ## Run ci linters
-lint/ci: lint/go lint/typos lint/md lint/arch lint/untested
+lint/ci: lint/go lint/typos lint/md lint/arch lint/untested lint/scc
 
 lint/go:
 	@echo "Run go linter"
@@ -36,6 +36,11 @@ lint/bd:
 lint/untested:
 	@echo "Check for packages without tests"
 	@misc/scripts/find-untested-pkgs.sh
+
+## Check Go code size thresholds
+lint/scc:
+	@echo "Run scc threshold check"
+	@bash misc/scripts/scc-threshold.sh
 
 ## Format all source files
 fmt: fmt/go fmt/golangci-lint fmt/md
@@ -166,3 +171,8 @@ run/insight:
 build/insight:
 	@echo "Build insight service"
 	@go build -o build/insight ./cmd/insight
+
+## Count code with scc
+stats/scc:
+	@echo "Counting code with scc"
+	@bash misc/scripts/scc-threshold.sh $(if $(PACKAGE),$(PACKAGE),.)
