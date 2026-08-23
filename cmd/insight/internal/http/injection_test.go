@@ -16,10 +16,11 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/events"
 	insighthttp "github.com/WinPooh32/insight/cmd/insight/internal/http"
+	"github.com/WinPooh32/insight/cmd/insight/internal/lib/httphelper"
 	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
 	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/testutil"
 )
 
 const (
@@ -108,7 +109,7 @@ func newInjectionFixture(t *testing.T, indexMd string, docs map[string]string, e
 	router := insighthttp.Router(injection)
 
 	return &injectionFixture{
-		server: testutil.NewTestServer(t, router), cwd: cwd, queries: queries,
+		server: httphelper.NewTestServer(t, router), cwd: cwd, queries: queries,
 	}
 }
 
@@ -168,16 +169,16 @@ func TestInjectionUpsRelevant(t *testing.T) {
 		},
 		emb)
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
 	if ct := resp.Header.Get("Content-Type"); ct != "application/json" {
 		t.Errorf("Content-Type = %q, want application/json", ct)
 	}
 
-	event, ctx := additionalContext(t, testutil.ReadBody(resp))
+	event, ctx := additionalContext(t, httphelper.ReadBody(resp))
 	if event != "UserPromptSubmit" {
 		t.Errorf("hookEventName = %q, want UserPromptSubmit", event)
 	}
@@ -204,21 +205,21 @@ func TestInjectionUpsDedup(t *testing.T) {
 
 	payload := upsPayload(fx.cwd, "s1", "zebra")
 
-	first := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
+	first := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
 	defer first.Body.Close()
 
-	testutil.AssertStatus(t, first, http.StatusOK)
+	httphelper.AssertStatus(t, first, http.StatusOK)
 
-	if strings.TrimSpace(string(testutil.ReadBody(first))) == "" {
+	if strings.TrimSpace(string(httphelper.ReadBody(first))) == "" {
 		t.Fatalf("first UPS returned an empty body, want an offer")
 	}
 
-	second := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
+	second := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
 	defer second.Body.Close()
 
-	testutil.AssertStatus(t, second, http.StatusOK)
+	httphelper.AssertStatus(t, second, http.StatusOK)
 
-	if body := string(testutil.ReadBody(second)); body != "" {
+	if body := string(httphelper.ReadBody(second)); body != "" {
 		t.Errorf("second UPS body = %q, want empty (already injected)", body)
 	}
 }
@@ -246,12 +247,12 @@ func TestInjectionPtuDifferentEntry(t *testing.T) {
 		},
 		emb)
 
-	ups := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	ups := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
 	defer ups.Body.Close()
 
-	testutil.AssertStatus(t, ups, http.StatusOK)
+	httphelper.AssertStatus(t, ups, http.StatusOK)
 
-	event, ctx := additionalContext(t, testutil.ReadBody(ups))
+	event, ctx := additionalContext(t, httphelper.ReadBody(ups))
 	if event != "UserPromptSubmit" || !strings.Contains(ctx, raPath) {
 		t.Fatalf("UPS = %q / %q, want Alpha offered", event, ctx)
 	}
@@ -272,12 +273,12 @@ func TestInjectionPtuDifferentEntry(t *testing.T) {
 		"tool_input":      map[string]any{"command": "ls"},
 	}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	event, ctx = additionalContext(t, testutil.ReadBody(resp))
+	event, ctx = additionalContext(t, httphelper.ReadBody(resp))
 	if event != "PreToolUse" {
 		t.Errorf("hookEventName = %q, want PreToolUse", event)
 	}
@@ -305,12 +306,12 @@ func TestInjectionUpsIrrelevant(t *testing.T) {
 		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
 		emb)
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if body := string(testutil.ReadBody(resp)); body != "" {
+	if body := string(httphelper.ReadBody(resp)); body != "" {
 		t.Errorf("UPS body = %q, want empty (below the score floor)", body)
 	}
 }
@@ -323,12 +324,12 @@ func TestInjectionEmbedderDown(t *testing.T) {
 		map[string]string{raPath: "# Alpha\n\nzebra body\n"},
 		failingEmbedder{})
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if body := string(testutil.ReadBody(resp)); body != "" {
+	if body := string(httphelper.ReadBody(resp)); body != "" {
 		t.Errorf("UPS body = %q, want empty (embedder down degrades to 200 empty)", body)
 	}
 }
@@ -350,12 +351,12 @@ func TestInjectionMissingFields(t *testing.T) {
 		"no_session_id": {"cwd": fx.cwd, "prompt": "zebra"},
 		"no_cwd":        {"session_id": "s1", "prompt": "zebra"},
 	} {
-		resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
+		resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
 		defer resp.Body.Close()
 
-		testutil.AssertStatus(t, resp, http.StatusOK)
+		httphelper.AssertStatus(t, resp, http.StatusOK)
 
-		if body := string(testutil.ReadBody(resp)); body != "" {
+		if body := string(httphelper.ReadBody(resp)); body != "" {
 			t.Errorf("%s: UPS body = %q, want empty", name, body)
 		}
 	}
@@ -390,12 +391,12 @@ func TestInjectionPayloadSize(t *testing.T) {
 	for _, tc := range cases {
 		body := sizedUpsBody(tc.session, fx.cwd, tc.size)
 
-		resp := testutil.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
+		resp := httphelper.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
 		defer resp.Body.Close()
 
-		testutil.AssertStatus(t, resp, http.StatusOK)
+		httphelper.AssertStatus(t, resp, http.StatusOK)
 
-		empty := strings.TrimSpace(string(testutil.ReadBody(resp))) == ""
+		empty := strings.TrimSpace(string(httphelper.ReadBody(resp))) == ""
 		if empty != tc.wantEmpty {
 			t.Errorf("%s: empty body = %v, want %v", tc.name, empty, tc.wantEmpty)
 		}
@@ -419,12 +420,12 @@ func TestInjectionMalformedPayload(t *testing.T) {
 	// before failing, so only decode's failure path keeps it empty.
 	body := []byte(`{"session_id":"s1","cwd":"` + fx.cwd + `","prompt":"zebra"`)
 
-	resp := testutil.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
+	resp := httphelper.PostRaw(t, fx.server, events.HookEndpoint("UserPromptSubmit"), body)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if b := string(testutil.ReadBody(resp)); b != "" {
+	if b := string(httphelper.ReadBody(resp)); b != "" {
 		t.Errorf("UPS body = %q, want empty (malformed payload)", b)
 	}
 }
@@ -451,12 +452,12 @@ func TestInjectionPtuToolInput(t *testing.T) {
 		"tool_input": map[string]any{"command": "zebra"},
 	}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	event, ctx := additionalContext(t, testutil.ReadBody(resp))
+	event, ctx := additionalContext(t, httphelper.ReadBody(resp))
 	if event != "PreToolUse" || !strings.Contains(ctx, raPath) {
 		t.Fatalf("PTU = %q / %q, want Alpha offered from the tool input", event, ctx)
 	}
@@ -485,12 +486,12 @@ func TestInjectionPtuLastPrompt(t *testing.T) {
 
 	ptu := map[string]any{"session_id": "s1", "cwd": fx.cwd}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	event, ctx := additionalContext(t, testutil.ReadBody(resp))
+	event, ctx := additionalContext(t, httphelper.ReadBody(resp))
 	if event != "PreToolUse" || !strings.Contains(ctx, raPath) {
 		t.Fatalf("PTU = %q / %q, want Alpha offered from the persisted prompt", event, ctx)
 	}
@@ -526,23 +527,23 @@ func TestInjectionUpsPersistsPrompt(t *testing.T) {
 		t.Fatalf("seed session state: %v", err)
 	}
 
-	ups := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
+	ups := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), upsPayload(fx.cwd, "s1", "zebra"))
 	defer ups.Body.Close()
 
-	testutil.AssertStatus(t, ups, http.StatusOK)
+	httphelper.AssertStatus(t, ups, http.StatusOK)
 
-	if _, ctx := additionalContext(t, testutil.ReadBody(ups)); !strings.Contains(ctx, raPath) {
+	if _, ctx := additionalContext(t, httphelper.ReadBody(ups)); !strings.Contains(ctx, raPath) {
 		t.Fatalf("UPS = %q, want Alpha offered", ctx)
 	}
 
 	ptu := map[string]any{"session_id": "s1", "cwd": fx.cwd}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if body := string(testutil.ReadBody(resp)); body != "" {
+	if body := string(httphelper.ReadBody(resp)); body != "" {
 		t.Errorf("PTU body = %q, want empty (the UPS persisted its prompt)", body)
 	}
 }
@@ -572,12 +573,12 @@ func TestInjectionPtuMissingSession(t *testing.T) {
 		"transcript_path": transcript,
 	}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("PreToolUse"), ptu)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if body := string(testutil.ReadBody(resp)); body != "" {
+	if body := string(httphelper.ReadBody(resp)); body != "" {
 		t.Errorf("PTU body = %q, want empty (missing session_id)", body)
 	}
 }
@@ -597,12 +598,12 @@ func TestInjectionUpsMissingCwdLeavesNoState(t *testing.T) {
 
 	payload := map[string]any{"session_id": "s1", "prompt": "zebra"}
 
-	resp := testutil.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
+	resp := httphelper.PostJSON(t, fx.server, events.HookEndpoint("UserPromptSubmit"), payload)
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
-	if body := string(testutil.ReadBody(resp)); body != "" {
+	if body := string(httphelper.ReadBody(resp)); body != "" {
 		t.Errorf("UPS body = %q, want empty (missing cwd)", body)
 	}
 

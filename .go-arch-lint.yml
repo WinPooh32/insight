@@ -6,13 +6,13 @@ excludeFiles:
   - "^.*_test\\.go$"
 
 components:
-  main: { in: cmd/insight }
-  config: { in: cmd/insight/internal/config }
-  storage: { in: [cmd/insight/internal/storage, cmd/insight/internal/storage/**] }
-  http: { in: cmd/insight/internal/http }
-  events: { in: cmd/insight/internal/events }
-  testutil: { in: cmd/insight/internal/testutil }
-  research: { in: [cmd/insight/internal/research, cmd/insight/internal/research/**] }
+  main: { in: cmd/*/ }
+  config: { in: cmd/*/internal/config }
+  storage: { in: [cmd/*/internal/storage, cmd/*/internal/storage/**] }
+  http: { in: cmd/*/internal/http }
+  events: { in: cmd/*/internal/events }
+  lib: { in: cmd/*/internal/lib/** }
+  research: { in: [cmd/*/internal/research, cmd/*/internal/research/**] }
 
 deps:
   main:
@@ -31,7 +31,4 @@ deps:
   research:
     mayDependOn:
       - research
-      - storage
-  testutil:
-    mayDependOn:
       - storage

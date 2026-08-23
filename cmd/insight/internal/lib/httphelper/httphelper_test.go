@@ -1,4 +1,4 @@
-package testutil_test
+package httphelper_test
 
 import (
 	"context"
@@ -7,27 +7,13 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/lib/httphelper"
 )
-
-func TestNewTestStorage(t *testing.T) {
-	t.Parallel()
-
-	s := testutil.NewTestStorage(t)
-
-	if s == nil {
-		t.Fatal("NewTestStorage returned nil")
-	}
-
-	if s.Queries() == nil {
-		t.Error("Queries() returned nil")
-	}
-}
 
 func TestNewTestServer(t *testing.T) {
 	t.Parallel()
 
-	srv := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httphelper.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -52,14 +38,14 @@ func TestPostJSON(t *testing.T) {
 
 	var gotBody, gotContentType string
 
-	srv := testutil.NewTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
+	srv := httphelper.NewTestServer(t, http.HandlerFunc(func(_ http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 
 		gotBody = string(b)
 		gotContentType = r.Header.Get("Content-Type")
 	}))
 
-	resp := testutil.PostJSON(t, srv, "/echo", map[string]string{"k": "v"})
+	resp := httphelper.PostJSON(t, srv, "/echo", map[string]string{"k": "v"})
 	defer resp.Body.Close()
 
 	if gotBody != `{"k":"v"}` {
@@ -74,13 +60,13 @@ func TestPostJSON(t *testing.T) {
 func TestPostRaw(t *testing.T) {
 	t.Parallel()
 
-	srv := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	srv := httphelper.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		b, _ := io.ReadAll(r.Body)
 
 		_, _ = w.Write(b)
 	}))
 
-	resp := testutil.PostRaw(t, srv, "/echo", []byte("raw-bytes"))
+	resp := httphelper.PostRaw(t, srv, "/echo", []byte("raw-bytes"))
 	defer resp.Body.Close()
 
 	body, err := io.ReadAll(resp.Body)
@@ -96,18 +82,18 @@ func TestPostRaw(t *testing.T) {
 func TestAssertStatus(t *testing.T) {
 	t.Parallel()
 
-	srv := testutil.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+	srv := httphelper.NewTestServer(t, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	}))
 
-	resp := testutil.PostRaw(t, srv, "/ok", []byte("x"))
+	resp := httphelper.PostRaw(t, srv, "/ok", []byte("x"))
 	defer resp.Body.Close()
 
-	testutil.AssertStatus(t, resp, http.StatusOK)
+	httphelper.AssertStatus(t, resp, http.StatusOK)
 
 	var sub fakeTB
 
-	testutil.AssertStatus(&sub, resp, http.StatusInternalServerError)
+	httphelper.AssertStatus(&sub, resp, http.StatusInternalServerError)
 
 	if sub.err == "" {
 		t.Error("AssertStatus reported no error on mismatch")

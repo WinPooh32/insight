@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/testutil"
 )
 
 func TestResearchEntriesRoundTrip(t *testing.T) {

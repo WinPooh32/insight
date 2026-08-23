@@ -14,7 +14,7 @@ import (
 	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
 	"github.com/WinPooh32/insight/cmd/insight/internal/research/rank"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/testutil"
 )
 
 // queryWord is the word the BM25 pre-filter looks for; every test

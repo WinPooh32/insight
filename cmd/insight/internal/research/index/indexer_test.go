@@ -14,7 +14,7 @@ import (
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/research/index"
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage/db"
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/testutil"
 )
 
 // fakeEmbedder counts Embed calls and returns a deterministic

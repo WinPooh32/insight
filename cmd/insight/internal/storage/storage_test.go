@@ -9,7 +9,7 @@ import (
 	"testing"
 
 	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
-	"github.com/WinPooh32/insight/cmd/insight/internal/testutil"
+	"github.com/WinPooh32/insight/cmd/insight/internal/storage/testutil"
 
 	_ "modernc.org/sqlite"
 )

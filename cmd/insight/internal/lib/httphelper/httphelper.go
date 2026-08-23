@@ -1,41 +1,14 @@
-package testutil
+package httphelper
 
 import (
 	"bytes"
 	"context"
 	"encoding/json"
 	"io"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
-	"path/filepath"
 	"testing"
-
-	"github.com/WinPooh32/insight/cmd/insight/internal/storage"
-
-	// sqlite driver required for storage initialization.
-	_ "modernc.org/sqlite"
 )
-
-// NewTestStorage creates a SQLiteStorage instance backed by a temp dir.
-// The storage is closed when the test completes.
-func NewTestStorage(tb testing.TB) *storage.SQLiteStorage {
-	tb.Helper()
-
-	tmpDir := tb.TempDir()
-	dbPath := filepath.Join(tmpDir, "test.db")
-
-	logger := slog.New(slog.DiscardHandler)
-
-	storageInst, err := storage.NewSQLiteStorage(context.Background(), dbPath, logger)
-	if err != nil {
-		tb.Fatalf("failed to create storage: %v", err)
-	}
-
-	tb.Cleanup(func() { storageInst.Close() })
-
-	return storageInst
-}
 
 // NewTestServer creates an httptest.Server from a router and registers cleanup.
 func NewTestServer(tb testing.TB, router http.Handler) *httptest.Server {
