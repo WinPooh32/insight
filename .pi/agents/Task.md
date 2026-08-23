@@ -1,16 +1,12 @@
 ---
 # ref: https://github.com/gastownhall/beads/blob/main/plugins/beads/agents/task-agent.md
+display_name: Task
 description: Use for working on issues
-model: opus
-color: pink
+model: smart:agent
+prompt_mode: append
+color: lime
 background: false
-maxTurns: 200
-mcpServers:
-  - gopls:
-      type: stdio
-      command: make
-      args:
-        - run/mcp-gopls
+max_turns: 200
 ---
 # Task Agent
 

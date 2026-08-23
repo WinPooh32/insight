@@ -1,0 +1,76 @@
+{
+    "hooks": {
+        "SessionStart": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".pi/scripts/motd.sh"
+                    }
+                ]
+            }
+        ],
+        "PreToolUse": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/circuit-breaker.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/block-download-pipes.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "write|edit|bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/block-nolint.sh",
+                        "statusMessage": "Checking for //nolint..."
+                    }
+                ]
+            }
+        ],
+        "SessionEnd": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/circuit-breaker.sh"
+                    }
+                ]
+            }
+        ],
+        "PostToolUse": [
+            {
+                "matcher": "searxng_query|browser_markdown",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/warn-mcp-query.sh"
+                    }
+                ]
+            },
+            {
+                "matcher": "bash",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".claude/hooks/warn-web-request.sh"
+                    }
+                ]
+            }
+        ]
+    }
+}
