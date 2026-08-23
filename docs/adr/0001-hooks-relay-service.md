@@ -1,7 +1,17 @@
 # Use local HTTP relay service for Claude Code hook events
 
-- **Status:** accepted
+- **Status:** accepted (re-scoped 2026-08-16 — see [Amendment](#amendment))
 - **Date:** 2026-08-07
+
+> **Re-scoped:** event storage, the event query API, and the health endpoint
+> were removed.
+>
+> This service now only serves the research-link injection endpoints
+> (`POST /hooks/v1/user-prompt-submit`, `POST /hooks/v1/pre-tool-use`).
+>
+> The Context, Options, Decision, and Consequences below describe the original
+> event-store scope. They are superseded where they conflict with the
+> [Amendment](#amendment).
 
 ## Context
 
