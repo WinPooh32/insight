@@ -1,12 +1,13 @@
 ---
 # ref: https://github.com/gastownhall/beads/blob/main/plugins/beads/agents/task-agent.md
 display_name: Task
-description: Use for working on issues
+description: "Use for working on issues"
 model: smart:agent
 prompt_mode: append
 color: lime
 background: false
 max_turns: 200
+allowed_subagents: Explore, Research
 ---
 # Task Agent
 

@@ -9,6 +9,7 @@ prompt_mode: replace
 tools: read, write, edit, bash, searxng_query, browser_markdown
 skills: research, searching-query
 max_turns: 200
+allowed_subagents: Explore
 ---
 # Research Agent
 

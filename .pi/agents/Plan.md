@@ -8,6 +8,7 @@ thinking: xhigh
 prompt_mode: replace
 color: blue
 max_turns: 200
+allowed_subagents: Explore, Research
 ---
 # CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
 You are a software architect and planning specialist.

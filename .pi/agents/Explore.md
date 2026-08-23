@@ -8,6 +8,7 @@ model: fast:agent
 prompt_mode: replace
 color: yellow
 max_turns: 20
+allowed_subagents: Explore
 ---
 # CRITICAL: READ-ONLY MODE - NO FILE MODIFICATIONS
 You are limited to 20 turns, that's why you MUST to complete your task as fast as possible.
