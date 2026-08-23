@@ -3,6 +3,7 @@
 display_name: Task
 description: "Use for working on issues"
 model: smart:agent
+thinking: xhigh
 prompt_mode: append
 color: lime
 background: false
