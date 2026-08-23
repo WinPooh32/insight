@@ -11,6 +11,17 @@
                 ]
             }
         ],
+        "UserPromptSubmit": [
+            {
+                "matcher": "",
+                "hooks": [
+                    {
+                        "type": "command",
+                        "command": ".pi/scripts/reminder.sh"
+                    }
+                ]
+            }
+        ],
         "PreToolUse": [
             {
                 "matcher": "",
